@@ -1,0 +1,75 @@
+<UserControl x:Class="vs2026_plugin.UI.Control.XygeniConfigurationControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:vsshell="clr-namespace:Microsoft.VisualStudio.PlatformUI;assembly=Microsoft.VisualStudio.Shell.15.0"
+             mc:Ignorable="d" 
+             d:DesignHeight="300" d:DesignWidth="300">
+    
+    <UserControl.Resources>
+        <!-- Style for the button -->
+        <Style x:Key="StyledButton" TargetType="Button">
+            <Setter Property="Background" Value="#2D2D30"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Width" Value="200"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Background="{TemplateBinding Background}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <!-- Icon -->
+                            <Image Source="your-icon-path.png" Width="20" Height="20" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                            <!-- Text -->
+                            <TextBlock Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="10,0,0,0" Text="{TemplateBinding Content}" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        
+        <TextBlock Text="Xygeni API URL" Margin="0,0,0,5" FontWeight="Bold" Grid.Row="0"
+        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+        <TextBox x:Name="ApiUrlTxt" Margin="0,0,0,10" Grid.Row="1" Width="300" HorizontalAlignment="Left"/>
+
+        <TextBlock Text="Xygeni API Token" Margin="0,0,0,5" FontWeight="Bold" Grid.Row="2"
+        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+        <PasswordBox x:Name="ApiTokenTxt" Margin="0,0,0,10" Grid.Row="3" Width="300" HorizontalAlignment="Left"/>
+
+        <StackPanel Orientation="Horizontal" Grid.Row="4" Margin="0,0,0,10">
+            <TextBlock Text="Xygeni Scanner Status: " 
+             Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+            <TextBlock x:Name="StatusTxt" Padding="5 1 5 1" FontWeight="Bold" Text="not installed" Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+        </StackPanel>
+        
+        <StackPanel Orientation="Horizontal" Grid.Row="5" Margin="0,0,0,0">
+            <Button x:Name="SaveBtn" Content="Save &amp; Install" Width="120" Margin="0,0,10,0" Click="SaveBtn_Click" />
+            <Button x:Name="RunScanBtn" Content="Run Scan" Width="80" Click="RunScanBtn_Click" Margin="0,0,10,0" IsEnabled="False"/>
+            <Button x:Name="OpenXygeniExplorerBtn" Content="Open Xygeni Explorer" Width="120" Margin="0,0,10,0" Click="OpenXygeniExplorerBtn_Click" IsEnabled="True"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

@@ -1,0 +1,45 @@
+name: Build Xygeni Visual Studio Extension
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2025
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.config') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v1
+        with:
+          vs-version: '[17.0, )'
+
+      - name: Restore NuGet packages
+        run: nuget restore ${{ inputs.solution-file-path }}
+
+      - name: Build
+        run: |
+          msbuild ${{ inputs.solution-file-path }} /p:configuration=Release /p:DeployExtension=false /p:ZipPackageCompressionLevel=normal /v:m
+        shell: powershell
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            **/bin
+            **/obj

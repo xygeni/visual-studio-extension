@@ -23,32 +23,28 @@ Xygeni Security Scanner is a powerful extension that brings comprehensive securi
 
 ## Installation
 
-1.  Open the **Extensions** view in VS Code (`Ctrl+Shift+X`).
-2.  Search for `Xygeni Security Scanner`.
+1.  Open the **Extensions** view in Visual Studio (`Ctrl+Shift+X`).
+2.  Search for `Xygeni Security`.
 3.  Click **Install**.
 
 ## Getting Started
 
-1.  **Open the Xygeni View:** After installation, click on the Xygeni icon in the activity bar.
+1.  **Open the Xygeni View:** After installation, click on the Xygeni icon in the main bar.
 2.  **Configure the Extension:**
     -   You will be prompted to configure the connection to the Xygeni service.
     -   Obtain an API token from your [Xygeni Dashboard](https://in.xygeni.io/dashboard/configuration-panel/profile). If you don't have an account, you can sign up for a trial.
     -   Enter the Xygeni API URL and your token in the configuration view.
 3.  **Run a Scan:**
-    -   Once configured, the "Scan" view will be available.
-    -   Click the "Run Scanner" button (▶️) to initiate a scan of your workspace.
+    -   Once configured, the "Scan" button will be enabled.
+    -   Click the "Run Scanner" button to initiate a scan of your workspace.
 4.  **View Results:**
-    -   Scan results will be displayed in the Xygeni view, categorized by type (SAST, SCA, Secrets, etc.).
+    -   Scan results will be displayed in the Xygeni Explorer view, categorized by type (SAST, SCA, Secrets, etc.).
     -   Click on an issue to see detailed information and navigate to the affected file and line.
 
 ## Extension Settings
 
-This extension contributes the following settings (accessible via `File > Preferences > Settings` and searching for "xygeni"):
-
--   `xygeni.api.xygeniUrl`: The URL of the Xygeni API server.
--   `xygeni.api.xygeniToken`: Your Xygeni API token. It is recommended to store this securely.
--   `xygeni.proxy.*`: A full set of options to configure a proxy.
-
+*   **Xygeni API URL**: The URL of the Xygeni API server.
+*   **Xygeni API Token**: The API token for authentication.
 
 ## Support
 
