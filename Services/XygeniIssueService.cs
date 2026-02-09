@@ -55,6 +55,11 @@ namespace vs2026_plugin.Services
             return _issues.Where(i => i.Category.Equals(category, StringComparison.OrdinalIgnoreCase)).ToList();
         }
 
+        public IXygeniIssue FindIssueById(string id)
+        {
+            return _issues.FirstOrDefault(i => i.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        }
+
         public async Task ReadIssuesAsync()
         {
             _logger.Log("");
@@ -69,6 +74,7 @@ namespace vs2026_plugin.Services
                     _logger.Log("  Working directory is null or empty, skipping...");
                     return;
                 }
+                _logger.Log("  Working directory: " + workingDir);
                 string suffix = XygeniCommands.ReportSuffix;
                 if (_isReadingIssues)
                 {
@@ -221,7 +227,7 @@ namespace vs2026_plugin.Services
                     Severity = rawMisconf["severity"]?.ToString(),
                     Confidence = rawMisconf["confidence"]?.ToString() ?? "high",
                     Category = "misconf",
-                    CategoryName = "Misconfiguration",
+                    CategoryName = "Misconfigurations",
                     ToolKind = rawMisconf["properties"]?["tool_kind"]?.ToString(),
                     File = rawMisconf["location"]?["filepath"]?.ToString(),
                     BeginLine = int.TryParse(rawMisconf["location"]?["beginLine"]?.ToString(), out int bl) ? bl : 0,
@@ -352,7 +358,7 @@ namespace vs2026_plugin.Services
                         Severity = vuln["severity"]?.ToString(),
                         Confidence = dep["confidence"]?.ToString() ?? "high",
                         Category = "sca",
-                        CategoryName = "Vulnerability",
+                        CategoryName = "SCA",
                         File = location?["filepath"]?.ToString() ?? dep["fileName"]?.ToString() ?? dep["displayFileName"]?.ToString(),
                         BeginLine = int.TryParse(location?["beginLine"]?.ToString(), out int bl) ? bl : 0,
                         EndLine = int.TryParse(location?["endLine"]?.ToString(), out int el) ? el : 0,
@@ -367,7 +373,8 @@ namespace vs2026_plugin.Services
                         Weakness = vuln["cwes"]?.ToObject<List<string>>(),
                         References = vuln["references"]?.ToObject<List<string>>(),
                         Vector = GetVector(vuln["ratings"] as JArray),
-                        Language = dep["language"]?.ToString()
+                        Language = dep["language"]?.ToString(),
+                        RemediableLevel = dep["remediable"]?["remediableLevel"]?.ToString() ?? "none"
                     };
                     _issues.Add(issue);
                 }
@@ -396,7 +403,7 @@ namespace vs2026_plugin.Services
                     Resource = rawSecret["resource"]?.ToString() ?? "",
                     FoundBy = rawSecret["detector"]?.ToString() ?? "",
                     Category = "secrets",
-                    CategoryName = "Secret",
+                    CategoryName = "Secrets",
                     File = rawSecret["location"]?["filepath"]?.ToString() ?? "",
                     BeginLine = int.TryParse(rawSecret["location"]?["beginLine"]?.ToString(), out int bl) ? bl : 0,
                     EndLine = int.TryParse(rawSecret["location"]?["endLine"]?.ToString(), out int el) ? el : 0,

@@ -25,6 +25,15 @@ namespace vs2026_plugin.Services
             _logger = logger;
         }
 
+        public static IssueDetailsService GetInstance()
+        {
+            if (_instance == null)
+            {
+                throw new InvalidOperationException("IssueDetailsService has not been initialized");
+            }
+            return _instance;
+        }
+
         public static IssueDetailsService GetInstance(AsyncPackage package = null, ILogger logger = null)
         {
             if (_instance == null && package != null)
@@ -32,6 +41,20 @@ namespace vs2026_plugin.Services
                 _instance = new IssueDetailsService(package, logger);
             }
             return _instance;
+        }
+
+        public async Task CloseIssueDetailsWindow()
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+            ToolWindowPane window = await _package.FindToolWindowAsync(typeof(IssueDetailsToolWindow), 0, true, _package.DisposalToken);
+            if ((null == window) || (null == window.Frame))
+            {
+                throw new NotSupportedException("Cannot create tool window");
+            }
+
+            IVsWindowFrame windowFrame = (IVsWindowFrame)window.Frame;
+            windowFrame.CloseFrame((uint)__FRAMECLOSE.FRAMECLOSE_NoSave);
         }
 
         public async Task ShowIssueDetailsAsync(IXygeniIssue issue)
@@ -52,8 +75,6 @@ namespace vs2026_plugin.Services
                 var html = GenerateHtml(issue);
                 control.NavigateToString(html);
                 
-                // Subscribe to events only once if needed, or handle differently
-                // For simplicity, we might just re-subscribe or rely on the control to stay alive
                 control.WebMessageReceived -= Control_WebMessageReceived;
                 control.WebMessageReceived += Control_WebMessageReceived;
             }
@@ -68,8 +89,20 @@ namespace vs2026_plugin.Services
                 {
                     IssueDetailsMessage msg = JsonConvert.DeserializeObject<IssueDetailsMessage>(message);
                     
-                         HandleRemediationView(msg);
-                    
+                    if (msg.Command == "openFile")
+                    {
+                        // Find the issue and open the file
+                        var issueService = XygeniIssueService.GetInstance();
+                        var issue = issueService?.FindIssueById(msg.IssueId);
+                        if (issue != null)
+                        {
+                            await OpenFileAsync(issue);
+                        }
+                    }
+                    else if (msg.Command == "remediate")
+                    {
+                        HandleRemediationView(msg);
+                    }
                 }
                 catch(Exception ex)
                 {
@@ -115,7 +148,329 @@ namespace vs2026_plugin.Services
 
         private void HandleRemediationView(IssueDetailsMessage message)
         {
-             _logger?.Log($"Remediation requested for {message.IssueId}");
+            _logger?.Log($"Remediation requested for {message.IssueId}");
+
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                try
+                {
+                    string scannerPath = XygeniInstallerService.GetInstance().GetScannerInstallationDir();
+                    var remediationService = RemediationService.GetInstance(_logger);
+                    var fixData = await remediationService.LaunchRemediationPreviewAsync(message.Kind, message.IssueId, message.File, scannerPath);
+
+                    if (fixData == null)
+                    {
+                        return;
+                    }
+
+                    string leftFilePath = message.File;
+                    OpenDiffView(fixData, leftFilePath);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.Log("Error during remediation preview " + ex.Message);
+                }
+            });
+        }
+
+        private void OpenDiffView(FixData fixData, string leftFilePath)
+        {
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                if (fixData != null && fixData.TempFile != null)
+                {
+                    _logger?.Log($"Remediation preview generated: {fixData.TempFile}");
+
+                    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+                    if (!Path.IsPathRooted(leftFilePath))
+                    {
+                        string rootDir = await XygeniConfigurationService.GetInstance().GetRootDirectoryAsync();
+                        if (!string.IsNullOrEmpty(rootDir))
+                        {
+                            leftFilePath = Path.Combine(rootDir, leftFilePath);
+                        }
+                    }
+
+                    if (File.Exists(leftFilePath) && File.Exists(fixData.TempFile))
+                    {
+                        var previewService = await _package.GetServiceAsync(typeof(SVsPreviewChangesService)) as IVsPreviewChangesService;
+                        if (previewService != null && false)
+                        {
+                            var engine = new RemediationPreviewEngine(leftFilePath, fixData.TempFile, _logger);
+                            previewService.PreviewChanges(engine);
+                        }
+                        else
+                        {
+                            _logger?.Log("IVsPreviewChangesService not found, falling back to IVsDifferenceService");
+                            var diffService = await _package.GetServiceAsync(typeof(SVsDifferenceService)) as IVsDifferenceService;
+                            diffService?.OpenComparisonWindow(leftFilePath, fixData.TempFile);
+
+                            OpenApplyChangesDialog();
+                        }
+                    }
+                    else
+                    {
+                        _logger?.Log($"One of the files does not exist: {leftFilePath} or {fixData.TempFile}");
+                    }
+                }
+            });
+        }
+
+        #region Preview Changes Implementation
+
+        // see https://learn.microsoft.com/en-us/dotnet/api/microsoft.visualstudio.shell.interop.ivspreviewchangesengine?view=visualstudiosdk-2022
+        private class RemediationPreviewEngine : IVsPreviewChangesEngine
+        {
+            private readonly string _originalFile;
+            private readonly string _tempFile;
+            private readonly ILogger _logger;
+            private RemediationPreviewList _changesList;
+
+            public RemediationPreviewEngine(string originalFile, string tempFile, ILogger logger)
+            {
+                _originalFile = originalFile;
+                _tempFile = tempFile;
+                _logger = logger;
+            }
+
+            public int GetTextViewDescription(out string pbstrTextViewDescription)
+            {
+                pbstrTextViewDescription = "Remediation preview";
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int GetConfirmation(out string pbstrConfirmed)
+            {
+                pbstrConfirmed = "Review and apply remediation changes.";
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int GetDescription(out string pbstrDescription)
+            {
+                pbstrDescription = "Remediation provided by Xygeni.";
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int GetRootChangesList(out object ppIChangesList)
+            {
+                if (_changesList == null)
+                {
+                    _changesList = new RemediationPreviewList(_originalFile, _tempFile, _logger);
+                }
+                ppIChangesList = _changesList;
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int ApplyChanges()
+            {
+                if (_changesList != null && _changesList.ApplyRequested)
+                {
+                    try
+                    {
+                        File.Copy(_tempFile, _originalFile, true);
+                        _logger?.Log($"Remediation applied to {_originalFile}");
+                        return Microsoft.VisualStudio.VSConstants.S_OK;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.Error(ex, "Failed to apply remediation");
+                    }
+                }
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int GetHelpContext(out string pdwHelpContext)
+            {
+                pdwHelpContext = "https://docs.xygeni.com/docs/visual-studio-extension";
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int GetTitle(out string pbstrTitle)
+            {
+                pbstrTitle = "Preview Changes - Xygeni Remediation";
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int GetWarning(out string pbstrWarning, out int pfWarningLevel)
+            {
+                pbstrWarning = "";
+                pfWarningLevel = 0;
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+        }
+
+        private class RemediationPreviewList : IVsPreviewChangesList
+        {
+            private readonly RemediationPreviewChange _change;
+            public bool ApplyRequested => _change.IsApplied;
+
+            public RemediationPreviewList(string originalFile, string tempFile, ILogger logger)
+            {
+                _change = new RemediationPreviewChange(this, originalFile, tempFile, logger);
+            }
+
+            public int GetCount(out uint pcItems)
+            {
+                pcItems = 1;
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+            public int GetItemCount(out uint pcItems)
+            {
+                pcItems = 1;
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+            
+            public int GetListChanges(ref uint pcChanges, VSTREELISTITEMCHANGE[] prgListChanges)
+            {
+                pcChanges = 1;
+                prgListChanges = new VSTREELISTITEMCHANGE[1];
+                prgListChanges[0].index = 0; //ulong
+                prgListChanges[0].grfChange = 0; //no changes??
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            
+
+            public int GetDescriptionText(uint index, out string pbstrDescriptionText)
+            {
+                pbstrDescriptionText = "Apply remediation to " + Path.GetFileName(_change.OriginalFile);
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int GetDisplayData(uint index, VSTREEDISPLAYDATA[] pData)
+            {
+                pData[0].Image = pData[0].SelectedImage = 0; // Default icon
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int GetExpandable(uint index, out int pfExpandable)
+            {
+                pfExpandable = 0;
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int GetExpandedList(uint index, out int pcChildren, out IVsLiteTreeList ppChildren)
+            {
+                pcChildren = 0;
+                ppChildren = null;
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int GetText(uint index, VSTREETEXTOPTIONS tto, out string pbstrText)
+            {
+                pbstrText = Path.GetFileName(_change.OriginalFile);
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int GetTipText(uint index, VSTREETOOLTIPTYPE tto, out string pbstrTipText)
+            {
+                pbstrTipText = _change.OriginalFile;
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+            
+
+            public int GetAttributes(uint index, out uint pAttributes)
+            {
+                pAttributes = 0;
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int LocateExpandedList(IVsLiteTreeList pChild, out uint iItem)
+            {
+                iItem = 0;
+                return Microsoft.VisualStudio.VSConstants.E_NOTIMPL;
+            }
+
+            public int ToggleState(uint index, out uint ptscr)
+            {
+                _change.IsApplied = !_change.IsApplied;
+                ptscr = (uint)(_change.IsApplied ? _VSTREESTATECHANGEREFRESH.TSCR_CURRENT : _VSTREESTATECHANGEREFRESH.TSCR_NONE);
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int GetFlags(out uint pdwFlags)
+            {
+                pdwFlags = 0;
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int OnClose(VSTREECLOSEACTIONS[] dwActions)
+            {
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int OnRequestSource(uint index, object pIUnknownTextView)
+            {
+                pIUnknownTextView = null;
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int UpdateCounter(out uint pCurUpdate, out uint pgrfChanges)
+            {
+                pCurUpdate = 0;
+                pgrfChanges = 0;
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+        }
+
+        private class RemediationPreviewChange
+        {
+            public string OriginalFile { get; }
+            private readonly string _tempFile;
+            private readonly ILogger _logger;
+            private readonly RemediationPreviewList _parent;
+            public bool IsApplied { get; set; } = true;
+
+            public RemediationPreviewChange(RemediationPreviewList parent, string originalFile, string tempFile, ILogger logger)
+            {
+                _parent = parent;
+                OriginalFile = originalFile;
+                _tempFile = tempFile;
+                _logger = logger;
+            }
+
+            public int GetDescription(out string pbstrDescription)
+            {
+                pbstrDescription = "Remediation changes for " + Path.GetFileName(OriginalFile);
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int GetTitle(out string pbstrTitle)
+            {
+                pbstrTitle = Path.GetFileName(OriginalFile);
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            public int OnClick(out int pfHandled)
+            {
+                pfHandled = 0;
+                return Microsoft.VisualStudio.VSConstants.S_OK;
+            }
+
+            
+        }
+
+        #endregion
+
+        private void OpenApplyChangesDialog()
+        {
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                
+                var dialog = new ApplyChangesDialog();
+                dialog.ShowDialog();
+                
+                if (dialog.SaveClicked)
+                {
+                    _logger?.Log("Apply changes dialog: Save clicked");
+                }
+                else
+                {
+                    _logger?.Log("Apply changes dialog: Reject clicked");
+                }
+            });
         }
 
         private string ColorToHex(Color color)
@@ -123,7 +478,7 @@ namespace vs2026_plugin.Services
             return $"#{color.R:X2}{color.G:X2}{color.B:X2}";
         }
 
-        private string GetThemeColors()
+        public string GetThemeColors()
         {
             try
             {
@@ -169,6 +524,44 @@ namespace vs2026_plugin.Services
             }
         }
 
+        public string GetEmptyStateHtml()
+        {
+            string themeColors = GetThemeColors();
+            string css = $@"
+                :root {{
+                    {themeColors}
+                }}
+                body {{ 
+                    font-family: 'Segoe UI', sans-serif; 
+                    padding: 0; 
+                    margin: 0; 
+                    color: var(--vs-foreground); 
+                    background-color: var(--vs-background);
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                    overflow: hidden;
+                }}
+                .message {{
+                    font-size: 14px;
+                    opacity: 0.6;
+                }}
+            ";
+
+            return $@"
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset=""UTF-8"">
+                    <style>{css}</style>
+                </head>
+                <body>
+                    <div class='message'>no issue selected</div>
+                </body>
+                </html>";
+        }
+
         private string GenerateHtml(IXygeniIssue issue)
         {
             try 
@@ -185,12 +578,12 @@ namespace vs2026_plugin.Services
                     body {{ font-family: 'Segoe UI', sans-serif; padding: 0; margin: 0; color: var(--vs-foreground); background-color: var(--vs-background); }}
                     .header {{ padding: 20px; background-color: var(--vs-background); border-bottom: 1px solid var(--vs-border); }}
                     .title-row {{ display: flex; align-items: center; margin-bottom: 10px; }}
-                    .severity-icon {{ width: 16px; height: 16px; margin-right: 10px; border-radius: 50%; display: inline-block; }}
+                    .severity-icon {{  margin-right: 10px; padding: 0px 5px 2px 5px; border-radius: 5px; display: inline-block; }}
                     .severity-critical {{ background-color: #ff0000; }}
-                    .severity-high {{ background-color: #ff4500; }}
+                    .severity-high {{ background-color: #fa9f4fff; }}
                     .severity-medium {{ background-color: #ffa500; }}
-                    .severity-low {{ background-color: #ffff00; }}
-                    .severity-info {{ background-color: #00bfff; }}
+                    .severity-low {{ background-color: #f7f787ff; color: #000000; }}
+                    .severity-info {{ background-color: #ccecf7ff; color: #000000; }}
                     
                     h1 {{ margin: 0; font-size: 18px; font-weight: 600; }}
                     .subtitle {{ font-size: 13px; opacity: 0.8; margin-bottom: 10px; }}
@@ -220,6 +613,26 @@ namespace vs2026_plugin.Services
                     .explanation p {{ margin-bottom: 10px; }}
                     .explanation code {{ font-family: Consolas, monospace; background-color: rgba(128,128,128,0.1); padding: 2px 4px; border-radius: 3px; }}
                     .explanation pre {{ background-color: rgba(128,128,128,0.1); padding: 10px; border-radius: 3px; overflow-x: auto; }}
+                    
+                    /* Button styling */
+                    .xy-button {{ 
+                        background-color: var(--vs-accent); 
+                        color: #ffffff; 
+                        border: none; 
+                        padding: 8px 16px; 
+                        font-size: 13px; 
+                        cursor: pointer; 
+                        border-radius: 3px; 
+                        font-family: 'Segoe UI', sans-serif;
+                        transition: background-color 0.2s;
+                    }}
+                    .xy-button:hover:not(:disabled) {{ 
+                        background-color: #005a9e; 
+                    }}
+                    .xy-button:disabled {{ 
+                        opacity: 0.6; 
+                        cursor: not-allowed; 
+                    }}
                ";
                
                string severityClass = $"severity-{issue.Severity?.ToLower() ?? "info"}";
@@ -247,8 +660,11 @@ namespace vs2026_plugin.Services
                 <body>
                     <div class='header'>
                         <div class='title-row'>
-                            <div class='severity-icon {severityClass}'></div>
-                            <h1>{issue.Type}</h1>
+                            <h1>Xygeni {issue.CategoryName} Issue</h1>
+                        </div>
+                        <div class='title-row'>
+                            <div class='severity-icon {severityClass}'>{issue.Severity}</div> 
+                            <div>{issue.Explanation.Substring(0, 30) + "..."}</div> 
                         </div>
                         <div class='subtitle'>
                            {issue.GetSubtitleLineHtml()}
@@ -262,6 +678,7 @@ namespace vs2026_plugin.Services
                         <div id='tab-btn-1' class='tab active' onclick='showTab(1)'>DETAILS</div>
                         <div id='tab-btn-2' class='tab' onclick='showTab(2)'>CODE</div>
                          <!-- Add Remediation tab if needed -->
+                         {issue.GetRemediationTab()}
                     </div>
                     
                     <div class='content-area'>
@@ -270,20 +687,43 @@ namespace vs2026_plugin.Services
                             
                             <div class='explanation'>
                                 <h3>Explanation</h3>
-                                {issue.Explanation ?? "No explanation available."}
+                                {issue.GetExplanationHtml()}
                             </div>
                         </div>
                         
                         <div id='content-2' class='tab-content'>
                             {issue.GetCodeSnippetHtml()}
                         </div>
+
+                        {issue.GetRemediationTabContent()}
                     </div>
                 </body>
                 </html>";
             }
             catch(Exception ex)
             {
-                return $"<html><body><h3>Error generating details</h3><pre>{ex}</pre></body></html>";
+                string css = $@"
+                    :root {{
+                        {GetThemeColors()}
+                    }}
+                    
+                    body {{ font-family: 'Segoe UI', sans-serif; padding: 0; margin: 0; color: var(--vs-foreground); background-color: var(--vs-background); }}
+                    .header {{ padding: 20px; background-color: var(--vs-background); border-bottom: 1px solid var(--vs-border); }}
+                   ";
+                return $@"
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset=""UTF-8"">
+                    <style>{css}</style>
+                    </script>
+                </head>
+                <body>
+                    <div class='header'>
+                        <h1>No details available</h1>
+                    </div>
+                </body>
+                </html>";
             }
         }
     }
@@ -292,5 +732,7 @@ namespace vs2026_plugin.Services
     {
         public string Command { get; set; }
         public string IssueId { get; set; }
+        public string Kind { get; set; }
+        public string File { get; set; }
     }
 }

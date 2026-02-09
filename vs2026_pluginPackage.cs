@@ -65,12 +65,16 @@ namespace vs2026_plugin
             Guid generalPaneGuid = new Guid("D0E6C712-4B6A-4A73-9095-2BB6E30D42A9");
                         
             // 1. Get the Output Window service
-            IVsOutputWindow outWindow = Package.GetGlobalService(typeof(SVsOutputWindow)) as IVsOutputWindow;
+            IVsOutputWindow outWindow = await GetServiceAsync(typeof(SVsOutputWindow)) as IVsOutputWindow;
 
-            // Retrieve and activate the pane
             IVsOutputWindowPane generalPane;
-            outWindow.CreatePane(ref generalPaneGuid, "XygeniOutput", 1, 1);
-            outWindow.GetPane(ref generalPaneGuid, out generalPane);
+            int hr = outWindow.GetPane(ref generalPaneGuid, out generalPane);
+
+            if (ErrorHandler.Failed(hr) || generalPane == null)
+            {
+                outWindow.CreatePane(ref generalPaneGuid, "Xygeni Output", 1, 1);
+                outWindow.GetPane(ref generalPaneGuid, out generalPane);
+            }
 
             // Initialize Logger
             Logger = new XygeniOutputLogger(generalPane);
@@ -83,6 +87,7 @@ namespace vs2026_plugin
             XygeniInstallerService.GetInstance(extensionPath, Logger);
             XygeniScannerService.GetInstance(Logger);
             XygeniIssueService.GetInstance(Logger);
+            IssueDetailsService.GetInstance(this, Logger);
 
             await Commands.XygeniSettingsCommand.InitializeAsync(this);
             await Commands.XygeniExplorerCommand.InitializeAsync(this);            
@@ -98,15 +103,19 @@ namespace vs2026_plugin
             ThreadHelper.ThrowIfNotOnUIThread();
 
             Logger.Log("");
-            Logger.Log("Workspace Ready. Init Xygeni Scanner...");
+            Logger.Log("  Opening project/solution");
 
             XygeniConfigurationService.GetInstance().ClearCache();
+
+            // READ ISSUES                
+            XygeniIssueService.GetInstance().ReadIssuesAsync();
 
             // Install Scanner
             Commands.XygeniCommands.InstallScanner();
 
-            // READ ISSUES                
-            XygeniIssueService.GetInstance().ReadIssuesAsync();
+            // Close Issue Details Window
+            IssueDetailsService.GetInstance().CloseIssueDetailsWindow();
+
         }
 
         
@@ -120,36 +129,42 @@ namespace vs2026_plugin
         private readonly vs2026_pluginPackage _package;
         public ILogger _logger { get; private set; }
 
+        private uint _solutionEventsCookie;
+        private IVsSolution _solution;
+
+
         public InitEvents(vs2026_pluginPackage package, ILogger logger)
         {
             _package = package;
             _logger = logger;
         }
 
-        public async void registerEvents()
+        public async Task registerEvents()
         {
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-            var ivsSolution = await ServiceProvider.GetGlobalServiceAsync(typeof(SVsSolution)) as IVsSolution;
-            if(ivsSolution != null)
+            _solution = await ServiceProvider.GetGlobalServiceAsync(typeof(SVsSolution)) as IVsSolution;
+            if(_solution != null)
             {
-                uint cookie;
-                ivsSolution.AdviseSolutionEvents(this as IVsSolutionEvents, out cookie);   
+                _solution.AdviseSolutionEvents(this, out _solutionEventsCookie);   
             }  
+        }
+
+        public void Dispose()
+        {
+            _solution.UnadviseSolutionEvents(_solutionEventsCookie);
         }
 
         // Events
         public void OnAfterOpenFolder(string pszFolderPath) {
-            //_package.OnWorkspaceReady(); 
+            _package.OnWorkspaceReady(); 
             return;
         }  
 
         public int OnAfterOpenProject(IVsHierarchy pHierarchy, int fAdded) {
-            _package.OnWorkspaceReady();
             return VSConstants.S_OK;
         }
 
         public int OnAfterOpenSolution(object pUnkReserved, int fNewSolution) {
-           _package.OnWorkspaceReady();
             return VSConstants.S_OK;
         }
 
@@ -168,7 +183,8 @@ namespace vs2026_plugin
         }
         public void OnAfterLoadAllDeferredProjects()        
         {
-            return;
+            ThreadHelper.ThrowIfNotOnUIThread();
+            _package.OnWorkspaceReady();
         }
 
         public int OnBeforeCloseProject(IVsHierarchy pHierarchy, int fRemoved)        

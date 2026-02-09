@@ -303,7 +303,7 @@ namespace vs2026_plugin.Services
         private string StripAnsiEscapeSequences(string text)
         {
             // Regex to strip ANSI escape codes
-            return text; //Regex.Replace(text, @"\x1B\[[^@-~]*[@-~]", String.Empty);
+            return Regex.Replace(text, @"\x1B\[[^@-~]*[@-~]", String.Empty);
         }
 
         private void OnChanged()

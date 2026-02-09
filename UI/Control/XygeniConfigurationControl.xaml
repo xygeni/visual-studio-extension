@@ -31,7 +31,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <!-- Icon -->
-                            <Image Source="your-icon-path.png" Width="20" Height="20" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                            <Image Source="media\icons\play.png" Width="20" Height="20" VerticalAlignment="Center" HorizontalAlignment="Center" />
                             <!-- Text -->
                             <TextBlock Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="10,0,0,0" Text="{TemplateBinding Content}" />
                         </Grid>
@@ -68,8 +68,19 @@
         
         <StackPanel Orientation="Horizontal" Grid.Row="5" Margin="0,0,0,0">
             <Button x:Name="SaveBtn" Content="Save &amp; Install" Width="120" Margin="0,0,10,0" Click="SaveBtn_Click" />
-            <Button x:Name="RunScanBtn" Content="Run Scan" Width="80" Click="RunScanBtn_Click" Margin="0,0,10,0" IsEnabled="False"/>
-            <Button x:Name="OpenXygeniExplorerBtn" Content="Open Xygeni Explorer" Width="120" Margin="0,0,10,0" Click="OpenXygeniExplorerBtn_Click" IsEnabled="True"/>
+            <Button Style="{StaticResource StyledButton}" x:Name="RunScanBtn" Content="Run Scan" Width="120" Click="RunScanBtn_Click" Margin="0,0,10,0" IsEnabled="False"/>
+            <Button x:Name="OpenXygeniExplorerBtn" Content="Open Xygeni Explorer" Width="130" Margin="0,0,10,0" Click="OpenXygeniExplorerBtn_Click" IsEnabled="True"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="7">
+            <TextBlock x:Name="OpenOutputBtn" 
+               Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}">
+                <Run Text="Open " />
+                <Hyperlink Click="OpenOutputBtn_Click">
+                    <Run Text="Output Window" />
+                </Hyperlink>
+                <Run Text=" to see the Xygeni operations output" />
+            </TextBlock>
         </StackPanel>
     </Grid>
 </UserControl>

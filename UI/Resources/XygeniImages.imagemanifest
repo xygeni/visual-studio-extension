@@ -6,8 +6,8 @@
     </GuidSymbol>
   </Symbols>
   <Images>
-    <Image Guid="$(guidXygeniImages)" ID="$(XygeniIcon)">
-      <Source Uri="UI\Resources\xy_icon.svg">
+    <Image Guid="guidXygeniImages" ID="XygeniIcon">
+      <Source Uri="UI\Resources\xy_icon32.png">
         <Size Value="16" />
       </Source>
     </Image>

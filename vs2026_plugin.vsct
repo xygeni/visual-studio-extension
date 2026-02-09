@@ -6,42 +6,47 @@
 
   <Commands package="guidvs2026_pluginPackage">
     <Groups>
-      <Group guid="guidXygeniSettingsCommandPackageCmdSet" id="MyMenuGroup" priority="0x0600">
+      <Group guid="guidXygeniCommandPackageCmdSet" id="XygeniSettingsGroupID" priority="0x0600">
         <Parent guid="guidSHLMainMenu" id="IDM_VS_TOOL_STANDARD"/>
+      </Group>
+      <Group guid="guidXygeniCommandPackageCmdSet" id="XygeniViewGroupID" priority="0x0600">
+        <Parent guid="guidSHLMainMenu" id="IDM_VS_MENU_VIEW"/>
       </Group>
     </Groups>
 
     <Buttons>
-      <Button guid="guidXygeniSettingsCommandPackageCmdSet" id="XygeniSettingsCommandId" priority="0x0100" type="Button">
-        <Parent guid="guidXygeniSettingsCommandPackageCmdSet" id="MyMenuGroup" />
-        <Icon guid="guidXygeniImages" id="XygeniIcon" />
+      <Button guid="guidXygeniCommandPackageCmdSet" id="XygeniSettingsCommandId" priority="0x0100" type="Button">
+        <Parent guid="guidXygeniCommandPackageCmdSet" id="XygeniSettingsGroupID" />
+        <Icon guid="XygeniIcon" id="XygeniIconID" />
         <Strings>
-          <ButtonText>xygeniSettings</ButtonText>
+          <ButtonText>Open Xygeni Settings</ButtonText>
           <CommandName>Open Xygeni Settings</CommandName>
         </Strings>
       </Button>
-      <Button guid="guidXygeniSettingsCommandPackageCmdSet" id="XygeniExplorerCommandId" priority="0x0110" type="Button">
-        <Parent guid="guidXygeniSettingsCommandPackageCmdSet" id="MyMenuGroup" />
-        <Icon guid="guidXygeniImages" id="XygeniIcon" />
+      <Button guid="guidXygeniCommandPackageCmdSet" id="XygeniExplorerCommandId" priority="0x0100" type="Button">
+        <Parent guid="guidXygeniCommandPackageCmdSet" id="XygeniViewGroupID" />
         <Strings>
           <ButtonText>Xygeni Explorer</ButtonText>
-          <CommandName>Open Xygeni Explorer</CommandName>
         </Strings>
       </Button>
     </Buttons>
+    <Bitmaps>
+      <Bitmap guid="XygeniIcon" href="UI\Resources\xy_icon16.png" usedList="XygeniIconID" />
+    </Bitmaps>
   </Commands>
 
   <Symbols>
     <GuidSymbol name="guidvs2026_pluginPackage" value="{b441d6b9-1770-4351-826d-479748bb2ff9}" />
 
-    <GuidSymbol name="guidXygeniSettingsCommandPackageCmdSet" value="{c7b39864-46c5-43a9-9892-e31d4e0e5621}">
-      <IDSymbol name="MyMenuGroup" value="0x1020" />
+    <GuidSymbol name="guidXygeniCommandPackageCmdSet" value="{c7b39864-46c5-43a9-9892-e31d4e0e5621}">
+      <IDSymbol name="XygeniViewGroupID" value="0x1010" />
+      <IDSymbol name="XygeniSettingsGroupID" value="0x1020" />
       <IDSymbol name="XygeniSettingsCommandId" value="0x0100" />
       <IDSymbol name="XygeniExplorerCommandId" value="0x0101" />
     </GuidSymbol>
 
-    <GuidSymbol name="guidXygeniImages" value="{f8b5f3d3-1b2c-4e8b-8a8b-3e4b5c6d7e8f}">
-      <IDSymbol name="XygeniIcon" value="1" />
+    <GuidSymbol name="XygeniIcon" value="{f9b5f3d3-1b2c-4e8b-8a8b-3e4b5c6d7e9f}">
+      <IDSymbol name="XygeniIconID" value="1" />
     </GuidSymbol>
   </Symbols>
   

@@ -55,6 +55,7 @@
     <Compile Include="UI\Control\XygeniExplorerControl.xaml.cs">
       <DependentUpon>XygeniExplorerControl.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Control\XygeniExplorerViewModel.cs" />
     <Compile Include="Commands\XygeniSettingsCommand.cs" />
     <Compile Include="Commands\XygeniExplorerCommand.cs" />
     <Compile Include="Commands\XygeniCommands.cs" />
@@ -63,15 +64,19 @@
     <Compile Include="Services\XygeniScannerService.cs" />
     <Compile Include="Services\XygeniLoggerService.cs" />
     <Compile Include="Services\XygeniIssueService.cs" />
+    <Compile Include="Services\RemediationService.cs" />
+    <Compile Include="Models\FixData.cs" />
     <Compile Include="Models\XygeniIssue.cs" />
     <Compile Include="Models\IaCXygeniIssue.cs" />
     <Compile Include="Models\MisconfXygeniIssue.cs" />
     <Compile Include="Models\SastXygeniIssue.cs" />
     <Compile Include="Models\SecretsXygeniIssue.cs" />
     <Compile Include="Models\VulnXygeniIssue.cs" />
-    <Compile Include="Models\SastXygeniIssue.cs" />
     <Compile Include="Services\IssueDetailsService.cs" />
     <Compile Include="UI\Window\IssueDetailsToolWindow.cs" />
+    <Compile Include="UI\Control\ApplyChangesDialog.xaml.cs">
+      <DependentUpon>ApplyChangesDialog.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Control\IssueDetailsControl.xaml.cs">
       <DependentUpon>IssueDetailsControl.xaml</DependentUpon>
     </Compile>
@@ -89,6 +94,10 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Include="UI\Control\ApplyChangesDialog.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
   </ItemGroup>
   <ItemGroup>
     <Reference Include="PresentationCore" />
@@ -101,6 +110,9 @@
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Xaml" />
     <Reference Include="WindowsBase" />    
+    <Reference Include="Markdig, Version=0.38.0, Culture=neutral, PublicKeyToken=null">
+      <HintPath>$(PkgMarkdig)\lib\net6.0\Markdig.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <None Include="source.extension.vsixmanifest">
@@ -118,78 +130,69 @@
     <PackageReference Include="Microsoft.VisualStudio.Language.Intellisense" Version="17.14.249" />
     <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.14.2120" NoWarn="NU1604" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+    <PackageReference Include="Markdig" Version="0.38.0" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="logo_xy.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
-    <Content Include="UI\Resources\xy_icon.svg">
+    <Content Include="UI\Resources\xy_icon32.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <BuildAction>Content</BuildAction>
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
-    <Content Include="UI\Resources\XygeniImages.imagemanifest">
+    <Content Include="media\icons\branch.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <BuildAction>Content</BuildAction>
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
-    <Content Include="media\icons\branch.svg">
+    <Content Include="media\icons\code-sec.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <BuildAction>Content</BuildAction>
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
-    <Content Include="media\icons\ci-cd.svg">
+    <Content Include="media\icons\open-source.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <BuildAction>Content</BuildAction>
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
-    <Content Include="media\icons\open-source.svg">
+    <Content Include="media\icons\iac.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <BuildAction>Content</BuildAction>
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
-    <Content Include="media\icons\warning.svg">
+    <Content Include="media\icons\secrets.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <BuildAction>Content</BuildAction>
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
-    <Content Include="media\icons\code-sec-new.svg">
+    <Content Include="media\icons\misconf.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <BuildAction>Content</BuildAction>
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
-    <Content Include="media\icons\secrets.svg">
+    <Content Include="media\icons\critical16.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <BuildAction>Content</BuildAction>
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
-    <Content Include="media\icons\misconf.svg">
+    <Content Include="media\icons\high16.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <BuildAction>Content</BuildAction>
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
-    <Content Include="media\icons\settings.svg">
+    <Content Include="media\icons\low16.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <BuildAction>Content</BuildAction>
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
-    <Content Include="media\icons\critical.svg">
+    <Content Include="media\icons\info16.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <BuildAction>Content</BuildAction>
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
-    <Content Include="media\icons\high.svg">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <BuildAction>Content</BuildAction>
-      <IncludeInVSIX>true</IncludeInVSIX>
-    </Content>
-    <Content Include="media\icons\low.svg">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <BuildAction>Content</BuildAction>
-      <IncludeInVSIX>true</IncludeInVSIX>
-    </Content>
-    <Content Include="media\icons\info.svg">
+    <Content Include="media\icons\play.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <BuildAction>Content</BuildAction>
       <IncludeInVSIX>true</IncludeInVSIX>

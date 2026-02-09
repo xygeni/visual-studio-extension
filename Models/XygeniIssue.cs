@@ -1,4 +1,5 @@
 using System;
+using Markdig;
 using System.Collections.Generic;
 
 namespace vs2026_plugin.Models
@@ -30,6 +31,10 @@ namespace vs2026_plugin.Models
         string GetIssueDetailsHtml();
         string GetCodeSnippetHtml();
         string GetCodeSnippetHtmlTab();
+        string GetExplanationShort();
+        string GetExplanationHtml();
+        string GetRemediationTab();
+        string GetRemediationTabContent();
     }
 
     public abstract class AbstractXygeniIssue : IXygeniIssue
@@ -119,5 +124,72 @@ namespace vs2026_plugin.Models
                 </table>
               </div>";
         }
+
+        public virtual string GetField(string field)
+        {
+            if(string.IsNullOrEmpty(field)) return "";
+            return field;
+        }
+
+        public virtual string GetExplanationShort()
+        {
+            if (string.IsNullOrEmpty(Explanation)) return "";
+
+            var length = Explanation.Length;
+            if (length > 30) return Explanation.Substring(0, 30) + "...";
+            return Explanation;
+        }
+
+        public virtual string GetExplanationHtml()
+        {
+            if(string.IsNullOrEmpty(Explanation)) return "";
+            var pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+            return Markdown.ToHtml(Explanation, pipeline);
+        }
+
+        public virtual string GetRemediationTab()
+        {
+            if (!RemediableAuto.Equals(RemediableLevel)) return "";
+            return $"<div id='tab-btn-3' class='tab' onclick='showTab(3)'>FIX IT</div>";
+        }
+
+        public virtual string GetRemediationTabContent()
+        {
+            if (!RemediableAuto.Equals(RemediableLevel)) return "";
+            return  $@"
+            <div id='content-3' class='tab-content'>
+                <p>XYGENI AGENT - REMEDIATE ISSUE</p>
+                <form id='remediation-form'>
+                    <p>This vulnerability is fixable. Run Xygeni Agent to get fixed version preview.</p>
+                    <br>
+                    <div id='rem-buttons'></div>
+                </form>
+                <script>
+                    window.addEventListener('load', function() {{
+                        document.getElementById('rem-buttons').innerHTML = 
+                            '<button id=\""rem-preview-button\"" type=\""submit\"" class=\""xy-button\"">Remediate with Xygeni Agent</button>';
+                    }});
+
+                    function formSubmitHandler(e) {{
+                        e.preventDefault();
+                        
+                        document.getElementById('rem-buttons').innerHTML = 
+                            '<button id=\""rem-processing-button\"" type=\""submit\"" disabled class=\""xy-button\"">Processing...</button>';
+                        
+                        chrome.webview.postMessage(JSON.stringify({{
+                            command: 'remediate',
+                            issueId: '{Id}',
+                            kind: '{Kind}',
+                            file: '{File}'
+                        }}));
+                        
+                        return false;
+                    }}
+
+                    document.getElementById('remediation-form').onsubmit = formSubmitHandler;
+                </script>
+            </div>";
+        }
     }
+
 }

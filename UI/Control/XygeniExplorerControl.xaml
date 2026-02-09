@@ -42,7 +42,7 @@
                             <ContentPresenter.Resources>
                                 <DataTemplate DataType="{x:Type local:TreeNodeData}">
                                     <StackPanel Orientation="Horizontal">
-                                        <Image Width="16" Height="16" Margin="0,0,5,0" VerticalAlignment="Center">
+                                        <Image Width="16" Height="16" Margin="0,2,5,0" VerticalAlignment="Center">
                                             <Image.Style>
                                                 <Style TargetType="Image">
                                                     <Setter Property="Source" Value="{Binding IconPath}"/>
@@ -72,17 +72,34 @@
         </Grid.RowDefinitions>
         
         <ToolBar Band="0" Background="Transparent" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowBorderBrushKey}}">
-            <Button x:Name="RefreshBtn" Click="RefreshBtn_Click" ToolTip="Refresh">
-                <TextBlock Text="🔄" Margin="2"/>
-            </Button>
+           
             <Button x:Name="RunScanBtn" Click="RunScanBtn_Click" ToolTip="Run Scan">
-                <TextBlock Text="▶️" Margin="2"/>
+                <Image Source="media\icons\play.png" Width="16" Height="16"/>
             </Button>
         </ToolBar>
 
-        <TreeView x:Name="ExplorerTree" Grid.Row="1" SelectedItemChanged="ExplorerTree_SelectedItemChanged">
-            <!-- DataTemplates will be added here or in code-behind if needed, 
-                 but for simplicity we can use TreeViewItem objects -->
+        <TreeView x:Name="ExplorerTree"
+          Grid.Row="1"
+          ItemsSource="{Binding RootItems}"
+          SelectedItemChanged="ExplorerTree_SelectedItemChanged">
+
+            <TreeView.Resources>
+
+                <!-- Hierarchical template -->
+                <HierarchicalDataTemplate DataType="{x:Type TreeViewItem}"
+                                        ItemsSource="{Binding Items}">
+                    <StackPanel Orientation="Horizontal">
+                        <Image Width="16"
+                            Height="16"
+                            Margin="0,0,4,0"
+                            Source="{Binding IconPath}" />
+                        <TextBlock Text="{Binding DisplayText}" />
+                    </StackPanel>
+                </HierarchicalDataTemplate>
+
+            </TreeView.Resources>
         </TreeView>
+
+
     </Grid>
 </UserControl>

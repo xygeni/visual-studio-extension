@@ -123,8 +123,8 @@ namespace vs2026_plugin.Services
                         CopyDirectory(extractedRoot, installPath);
 
                         _logger.Log("");
-                        _logger.Log("    Xygeni Scanner installed successfully ");
-                        _logger.Log("=============================================");
+                        _logger.Log("      Xygeni Scanner installed successfully ");
+                        _logger.Log("==================================================");
 
                         Status = "success";
                     }
@@ -132,6 +132,7 @@ namespace vs2026_plugin.Services
                     {
                         throw new Exception($"Expected root folder {XygeniScannerZipRootFolder} not found in the zip file.");
                     }
+                    IsInstalled = true;
                 }
                 finally
                 {
@@ -139,8 +140,7 @@ namespace vs2026_plugin.Services
                     {
                         try { Directory.Delete(tempDirPath, true); } catch { }
                     }
-                    InstallationRunning = false;
-                    IsInstalled = true;
+                    InstallationRunning = false;                    
                     OnChanged();
                 }
             }

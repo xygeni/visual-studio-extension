@@ -1,14 +1,15 @@
 using System;
 using System.Windows;
 using vs2026_plugin.Services;
+using System.Threading.Tasks;
 
 namespace vs2026_plugin.Commands
 {
     public static class XygeniCommands
     {
-        public static string ReportSuffix = "scanner.report.json";
+        public static string ReportSuffix = "xygeni_report.json";
 
-        public static async void InstallScanner()
+        public static async Task InstallScanner()
         {
             var _installerService = XygeniInstallerService.GetInstance();
             var _configurationService = XygeniConfigurationService.GetInstance();

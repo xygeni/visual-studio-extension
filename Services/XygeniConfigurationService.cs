@@ -8,7 +8,6 @@ using System.IO;
 using System.Linq;
 using EnvDTE80;
 using EnvDTE;
-using System.Threading.Tasks;
 using System.Collections.Generic;
 
 namespace vs2026_plugin.Services

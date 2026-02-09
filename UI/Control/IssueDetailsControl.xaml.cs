@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.VisualStudio.Shell;
 using vs2026_plugin.Services;
+using System.Threading.Tasks;
 
 namespace vs2026_plugin.UI.Control
 {
@@ -17,7 +18,7 @@ namespace vs2026_plugin.UI.Control
             InitializeWebView();
         }
 
-        private async void InitializeWebView()
+        private async Task InitializeWebView()
         {
             try
             {
@@ -27,6 +28,13 @@ namespace vs2026_plugin.UI.Control
                 await webView.EnsureCoreWebView2Async(env);
                 
                 webView.WebMessageReceived += WebView_WebMessageReceived;
+
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                var service = IssueDetailsService.GetInstance();
+                if (service != null)
+                {
+                    webView.NavigateToString(service.GetEmptyStateHtml());
+                }
             }
             catch (Exception ex)
             {

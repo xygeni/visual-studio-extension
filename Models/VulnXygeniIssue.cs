@@ -26,7 +26,7 @@ namespace vs2026_plugin.Models
             return $@"
             <div id=""tab-content-1"">
                 <table>
-                    <tr><th>Type</th><td>{Type}</td></tr>
+                    <tr><th>Type</th><td>{Type} {RemediableLevel}</td></tr>
                     <tr><th>Package</th><td>{Name} ({Version})</td></tr>
                     <tr><th>Severity</th><td>{Severity} (Score: {BaseScore})</td></tr>
                     <tr><th>Published</th><td>{PublicationDate}</td></tr>
@@ -39,5 +39,7 @@ namespace vs2026_plugin.Models
         {
             return @"<input type=""radio"" name=""tabs"" id=""tab-2""><label for=""tab-2"">CODE SNIPPET</label>";
         }
+
+        
     }
 }

@@ -140,6 +140,12 @@ namespace vs2026_plugin.UI.Control
             XygeniCommands.RunScan();
         }
 
+        private void OpenOutputBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            vs2026_pluginPackage.Instance?.Logger?.Show();
+        }
+
         private void OpenXygeniExplorerBtn_Click(object sender, RoutedEventArgs e)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
