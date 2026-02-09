@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ImageManifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://schemas.microsoft.com/developer/vsimagemanifest/2011">
+  <Symbols>
+    <GuidSymbol name="guidXygeniImages" value="{f8b5f3d3-1b2c-4e8b-8a8b-3e4b5c6d7e8f}">
+      <IDSymbol name="XygeniIcon" value="1" />
+    </GuidSymbol>
+  </Symbols>
+  <Images>
+    <Image Guid="guidXygeniImages" ID="XygeniIcon">
+      <Source Uri="UI\Resources\xy_icon32.png">
+        <Size Value="16" />
+      </Source>
+    </Image>
+  </Images>
+</ImageManifest>
