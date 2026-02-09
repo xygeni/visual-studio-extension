@@ -1,6 +1,7 @@
 
 using System.Windows;
 using Microsoft.VisualStudio.PlatformUI;
+using System;
 
 namespace vs2026_plugin.UI.Control
 {
@@ -8,20 +9,30 @@ namespace vs2026_plugin.UI.Control
     {
         public bool SaveClicked { get; private set; }
 
-        public ApplyChangesDialog()
+        // save clicked event
+        public event EventHandler SaveClickedEvent;
+
+        // reject clicked event
+        public event EventHandler RejectClickedEvent;
+
+        public ApplyChangesDialog(string title, string content)
         {
-            InitializeComponent();
+            InitializeComponent();           
+            Title = title;
+            ContentTxt.Text = content;
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
             SaveClicked = true;
+            SaveClickedEvent?.Invoke(this, EventArgs.Empty);
             Close();
         }
 
         private void Reject_Click(object sender, RoutedEventArgs e)
         {
             SaveClicked = false;
+            RejectClickedEvent?.Invoke(this, EventArgs.Empty);
             Close();
         }
     }

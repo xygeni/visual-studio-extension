@@ -16,6 +16,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Get release version
+        id: extract_version
+        shell: powershell
+        run: |
+          $branchName = "${{ github.ref_name }}"          
+          if ($branchName -match '^release\/(\d+\.\d+\.\d+)$') {
+            $version = $matches[1]
+            Write-Host "Building Version: $version"          
+            echo "EXT_VERSION=$version" >> $env:GITHUB_ENV                      
+            echo "version=$version" >> $env:GITHUB_OUTPUT
+          }
+          else {
+            Write-Error "Branch name does not match expected format 'release/a.b.c'"
+            exit 1
+          }    
+
       - uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
@@ -39,7 +55,7 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts
+          name: build-artifacts-${{ env.EXT_VERSION }}-build${{ github.run_number }}
           path: |
             **/bin
             **/obj

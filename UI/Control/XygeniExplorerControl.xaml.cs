@@ -79,7 +79,14 @@ namespace vs2026_plugin.UI.Control
         {
             if (_vm != null)
             {
-                _vm.SelectedItem = e.NewValue as TreeViewItem;
+                if (e.NewValue is TreeViewItem item && item.Header is TreeNodeData nodeData)
+                {
+                    _vm.SelectedItem = nodeData;
+                }
+                else
+                {
+                    _vm.SelectedItem = null;
+                }
             }
         }
 
@@ -93,13 +100,9 @@ namespace vs2026_plugin.UI.Control
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
                 try
                 {
-                    vs2026_pluginPackage.Instance?.Logger?.Log("Selected issue: " + issue.Type);
                     // Show Details View
                     await IssueDetailsService.GetInstance().ShowIssueDetailsAsync(issue);
 
-                
-                    vs2026_pluginPackage.Instance?.Logger?.Log("Opening file: " + issue.File);
-                    
                     // Open file
                     var dte = ServiceProvider.GlobalProvider.GetService(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
                     if (dte != null && !string.IsNullOrEmpty(issue.File))
@@ -113,8 +116,6 @@ namespace vs2026_plugin.UI.Control
                                 filePath = Path.Combine(rootDir, filePath);
                             }
                         }
-                        vs2026_pluginPackage.Instance?.Logger?.Log("Selected issue file: " + filePath);
-                    
 
                         if (File.Exists(filePath))
                         {

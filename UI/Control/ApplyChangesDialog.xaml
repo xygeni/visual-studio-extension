@@ -8,17 +8,17 @@
     Width="400">
 
     <StackPanel Margin="15">
-        <TextBlock Text="Do you want to apply these changes?"
+        <TextBlock x:Name="ContentTxt" Text="Save File"
                    Margin="0,0,0,15"/>
 
         <StackPanel Orientation="Horizontal"
                     HorizontalAlignment="Right">
-            <Button Content="Save"
-                    Width="80"
+            <Button Content="Apply &amp; Save"
+                    Width="120"
                     Margin="0,0,10,0"
                     Click="Save_Click"/>
-            <Button Content="Reject"
-                    Width="80"
+            <Button Content="Discard Changes"
+                    Width="120"
                     Click="Reject_Click"/>
         </StackPanel>
     </StackPanel>

@@ -10,6 +10,8 @@ using vs2026_plugin.UI.Window;
 using System.Linq;
 using Newtonsoft.Json;
 using System.Windows.Media;
+using Microsoft.VisualStudio.Text;
+using Microsoft.VisualStudio.ComponentModelHost;
 
 namespace vs2026_plugin.Services
 {
@@ -18,6 +20,10 @@ namespace vs2026_plugin.Services
         private static IssueDetailsService _instance;
         private readonly AsyncPackage _package;
         private readonly ILogger _logger;
+
+        private ToolWindowPane _window;
+
+        private const string XYGENI_STATUS_DIFF_VIEW_OPENED = "diff_view_opened";
 
         private IssueDetailsService(AsyncPackage package, ILogger logger)
         {
@@ -61,16 +67,16 @@ namespace vs2026_plugin.Services
         {
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-            ToolWindowPane window = await _package.FindToolWindowAsync(typeof(IssueDetailsToolWindow), 0, true, _package.DisposalToken);
-            if ((null == window) || (null == window.Frame))
+            _window = await _package.FindToolWindowAsync(typeof(IssueDetailsToolWindow), 0, true, _package.DisposalToken);
+            if ((null == _window) || (null == _window.Frame))
             {
                 throw new NotSupportedException("Cannot create tool window");
             }
 
-            IVsWindowFrame windowFrame = (IVsWindowFrame)window.Frame;
+            IVsWindowFrame windowFrame = (IVsWindowFrame)_window.Frame;
             Microsoft.VisualStudio.ErrorHandler.ThrowOnFailure(windowFrame.Show());
 
-            if (window.Content is IssueDetailsControl control)
+            if (_window.Content is IssueDetailsControl control)
             {
                 var html = GenerateHtml(issue);
                 control.NavigateToString(html);
@@ -163,8 +169,7 @@ namespace vs2026_plugin.Services
                         return;
                     }
 
-                    string leftFilePath = message.File;
-                    OpenDiffView(fixData, leftFilePath);
+                    OpenDiffView(fixData, message.File);
                 }
                 catch (Exception ex)
                 {
@@ -173,7 +178,7 @@ namespace vs2026_plugin.Services
             });
         }
 
-        private void OpenDiffView(FixData fixData, string leftFilePath)
+        private void OpenDiffView(FixData fixData, string originalFile)
         {
             ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
             {
@@ -183,292 +188,102 @@ namespace vs2026_plugin.Services
 
                     await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-                    if (!Path.IsPathRooted(leftFilePath))
+                    if (!Path.IsPathRooted(originalFile))
                     {
                         string rootDir = await XygeniConfigurationService.GetInstance().GetRootDirectoryAsync();
                         if (!string.IsNullOrEmpty(rootDir))
                         {
-                            leftFilePath = Path.Combine(rootDir, leftFilePath);
+                            originalFile = Path.Combine(rootDir, originalFile);
                         }
                     }
 
-                    if (File.Exists(leftFilePath) && File.Exists(fixData.TempFile))
+                    if (File.Exists(originalFile) && File.Exists(fixData.TempFile))
                     {
-                        var previewService = await _package.GetServiceAsync(typeof(SVsPreviewChangesService)) as IVsPreviewChangesService;
-                        if (previewService != null && false)
-                        {
-                            var engine = new RemediationPreviewEngine(leftFilePath, fixData.TempFile, _logger);
-                            previewService.PreviewChanges(engine);
-                        }
-                        else
-                        {
-                            _logger?.Log("IVsPreviewChangesService not found, falling back to IVsDifferenceService");
-                            var diffService = await _package.GetServiceAsync(typeof(SVsDifferenceService)) as IVsDifferenceService;
-                            diffService?.OpenComparisonWindow(leftFilePath, fixData.TempFile);
+                        var diffService = await _package.GetServiceAsync(typeof(SVsDifferenceService)) as IVsDifferenceService;
+                        
+                        // show diff content in a new window  
+                        string originalFileName = Path.GetFileName(originalFile);   
+                        try {
+                            string fixedText = File.ReadAllText(fixData.TempFile);
+                            var bufferFactory = await _package.GetServiceAsync(typeof(SComponentModel)) as IComponentModel;
 
-                            OpenApplyChangesDialog();
+                            var textBufferFactory = bufferFactory.GetService<ITextBufferFactoryService>();
+
+                            ITextBuffer rightBuffer = textBufferFactory.CreateTextBuffer(
+                                fixedText,
+                                textBufferFactory.TextContentType);
+                            
+                            diffService?.OpenComparisonWindow2(
+                                originalFile, 
+                                fixData.TempFile,
+                                originalFileName + " - Xygeni Fix Preview",
+                                "Proposed Fix by Xygeni for " + fixData.IssueTitle,
+                                originalFileName + " - Original",
+                                "Proposed Fix",
+                                null,
+                                null,
+                                32); // right is a temp file
+                        } catch (Exception ex) {
+                            _logger?.Log("Error opening diff window " + ex.Message);
                         }
+
+                        // show apply changes dialog
+                        OpenApplyChangesDialog(
+                            fixData.IssueTitle, 
+                            $"Please review the changes to {originalFileName} and apply them to save the fix.",
+                            (sender, e) => { 
+                                // copy content of fixData.TempFile to originalFile
+                                File.Copy(fixData.TempFile, originalFile, true);                                
+                            },
+                            (sender, e) => { 
+                                // nothing to do here
+                                
+                            });
+
+                        // sent message to IssueDetails webview to update the UI
+                        var message = new
+                        {
+                            Kind = "remediation",
+                            Command = XYGENI_STATUS_DIFF_VIEW_OPENED
+                        };
+
+                        if(_window != null)
+                        {
+                            var issueDetailsControl = _window.Content as IssueDetailsControl;
+                            issueDetailsControl?.PostMessage(JsonConvert.SerializeObject(message));                                                        
+                        }
+
                     }
                     else
                     {
-                        _logger?.Log($"One of the files does not exist: {leftFilePath} or {fixData.TempFile}");
+                        _logger?.Log($"One of the files does not exist: {originalFile} or {fixData.TempFile}");
                     }
                 }
             });
         }
 
-        #region Preview Changes Implementation
+        
 
-        // see https://learn.microsoft.com/en-us/dotnet/api/microsoft.visualstudio.shell.interop.ivspreviewchangesengine?view=visualstudiosdk-2022
-        private class RemediationPreviewEngine : IVsPreviewChangesEngine
-        {
-            private readonly string _originalFile;
-            private readonly string _tempFile;
-            private readonly ILogger _logger;
-            private RemediationPreviewList _changesList;
-
-            public RemediationPreviewEngine(string originalFile, string tempFile, ILogger logger)
-            {
-                _originalFile = originalFile;
-                _tempFile = tempFile;
-                _logger = logger;
-            }
-
-            public int GetTextViewDescription(out string pbstrTextViewDescription)
-            {
-                pbstrTextViewDescription = "Remediation preview";
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int GetConfirmation(out string pbstrConfirmed)
-            {
-                pbstrConfirmed = "Review and apply remediation changes.";
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int GetDescription(out string pbstrDescription)
-            {
-                pbstrDescription = "Remediation provided by Xygeni.";
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int GetRootChangesList(out object ppIChangesList)
-            {
-                if (_changesList == null)
-                {
-                    _changesList = new RemediationPreviewList(_originalFile, _tempFile, _logger);
-                }
-                ppIChangesList = _changesList;
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int ApplyChanges()
-            {
-                if (_changesList != null && _changesList.ApplyRequested)
-                {
-                    try
-                    {
-                        File.Copy(_tempFile, _originalFile, true);
-                        _logger?.Log($"Remediation applied to {_originalFile}");
-                        return Microsoft.VisualStudio.VSConstants.S_OK;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger?.Error(ex, "Failed to apply remediation");
-                    }
-                }
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int GetHelpContext(out string pdwHelpContext)
-            {
-                pdwHelpContext = "https://docs.xygeni.com/docs/visual-studio-extension";
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int GetTitle(out string pbstrTitle)
-            {
-                pbstrTitle = "Preview Changes - Xygeni Remediation";
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int GetWarning(out string pbstrWarning, out int pfWarningLevel)
-            {
-                pbstrWarning = "";
-                pfWarningLevel = 0;
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-        }
-
-        private class RemediationPreviewList : IVsPreviewChangesList
-        {
-            private readonly RemediationPreviewChange _change;
-            public bool ApplyRequested => _change.IsApplied;
-
-            public RemediationPreviewList(string originalFile, string tempFile, ILogger logger)
-            {
-                _change = new RemediationPreviewChange(this, originalFile, tempFile, logger);
-            }
-
-            public int GetCount(out uint pcItems)
-            {
-                pcItems = 1;
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-            public int GetItemCount(out uint pcItems)
-            {
-                pcItems = 1;
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-            
-            public int GetListChanges(ref uint pcChanges, VSTREELISTITEMCHANGE[] prgListChanges)
-            {
-                pcChanges = 1;
-                prgListChanges = new VSTREELISTITEMCHANGE[1];
-                prgListChanges[0].index = 0; //ulong
-                prgListChanges[0].grfChange = 0; //no changes??
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            
-
-            public int GetDescriptionText(uint index, out string pbstrDescriptionText)
-            {
-                pbstrDescriptionText = "Apply remediation to " + Path.GetFileName(_change.OriginalFile);
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int GetDisplayData(uint index, VSTREEDISPLAYDATA[] pData)
-            {
-                pData[0].Image = pData[0].SelectedImage = 0; // Default icon
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int GetExpandable(uint index, out int pfExpandable)
-            {
-                pfExpandable = 0;
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int GetExpandedList(uint index, out int pcChildren, out IVsLiteTreeList ppChildren)
-            {
-                pcChildren = 0;
-                ppChildren = null;
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int GetText(uint index, VSTREETEXTOPTIONS tto, out string pbstrText)
-            {
-                pbstrText = Path.GetFileName(_change.OriginalFile);
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int GetTipText(uint index, VSTREETOOLTIPTYPE tto, out string pbstrTipText)
-            {
-                pbstrTipText = _change.OriginalFile;
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-            
-
-            public int GetAttributes(uint index, out uint pAttributes)
-            {
-                pAttributes = 0;
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int LocateExpandedList(IVsLiteTreeList pChild, out uint iItem)
-            {
-                iItem = 0;
-                return Microsoft.VisualStudio.VSConstants.E_NOTIMPL;
-            }
-
-            public int ToggleState(uint index, out uint ptscr)
-            {
-                _change.IsApplied = !_change.IsApplied;
-                ptscr = (uint)(_change.IsApplied ? _VSTREESTATECHANGEREFRESH.TSCR_CURRENT : _VSTREESTATECHANGEREFRESH.TSCR_NONE);
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int GetFlags(out uint pdwFlags)
-            {
-                pdwFlags = 0;
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int OnClose(VSTREECLOSEACTIONS[] dwActions)
-            {
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int OnRequestSource(uint index, object pIUnknownTextView)
-            {
-                pIUnknownTextView = null;
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int UpdateCounter(out uint pCurUpdate, out uint pgrfChanges)
-            {
-                pCurUpdate = 0;
-                pgrfChanges = 0;
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-        }
-
-        private class RemediationPreviewChange
-        {
-            public string OriginalFile { get; }
-            private readonly string _tempFile;
-            private readonly ILogger _logger;
-            private readonly RemediationPreviewList _parent;
-            public bool IsApplied { get; set; } = true;
-
-            public RemediationPreviewChange(RemediationPreviewList parent, string originalFile, string tempFile, ILogger logger)
-            {
-                _parent = parent;
-                OriginalFile = originalFile;
-                _tempFile = tempFile;
-                _logger = logger;
-            }
-
-            public int GetDescription(out string pbstrDescription)
-            {
-                pbstrDescription = "Remediation changes for " + Path.GetFileName(OriginalFile);
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int GetTitle(out string pbstrTitle)
-            {
-                pbstrTitle = Path.GetFileName(OriginalFile);
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            public int OnClick(out int pfHandled)
-            {
-                pfHandled = 0;
-                return Microsoft.VisualStudio.VSConstants.S_OK;
-            }
-
-            
-        }
-
-        #endregion
-
-        private void OpenApplyChangesDialog()
+        private void OpenApplyChangesDialog(string issueTitle, string content, EventHandler saveAction, EventHandler rejectAction)
         {
             ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
-            {
-                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                
-                var dialog = new ApplyChangesDialog();
-                dialog.ShowDialog();
-                
-                if (dialog.SaveClicked)
+            {                
+                try
                 {
-                    _logger?.Log("Apply changes dialog: Save clicked");
+                    // show a modeless dialog to allow user edit the file and confirm changes
+                    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                    var dialog = new ApplyChangesDialog(issueTitle, content);
+                    dialog.SaveClickedEvent += saveAction;
+                    dialog.RejectClickedEvent += rejectAction;
+                    IVsUIShell uiShell = await _package.GetServiceAsync(typeof(SVsUIShell)) as IVsUIShell;
+                    uiShell.GetDialogOwnerHwnd(out IntPtr hwnd);
+                    var helper = new System.Windows.Interop.WindowInteropHelper(dialog);
+                    helper.Owner = hwnd;
+                    dialog.Show();                     
                 }
-                else
+                catch (Exception ex)
                 {
-                    _logger?.Log("Apply changes dialog: Reject clicked");
+                    _logger?.Error(ex, "Error opening ApplyChangesDialog");
                 }
             });
         }
@@ -655,6 +470,15 @@ namespace vs2026_plugin.Services
                         function openFile() {{
                              chrome.webview.postMessage(JSON.stringify({{ command: 'openFile', issueId: '{issue.Id}' }}));
                         }}
+
+                        function onMessage(event) {{
+                            console.log(event.data);
+                            const message = JSON.parse(event.data);
+                            if (message.command === '{XYGENI_STATUS_DIFF_VIEW_OPENED}') {{
+                                alert('save');
+                            }}
+                        }}
+                        chrome.webview.addEventListener('message', onMessage);
                     </script>
                 </head>
                 <body>

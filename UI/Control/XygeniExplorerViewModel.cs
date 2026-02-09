@@ -18,8 +18,10 @@ namespace vs2026_plugin.UI.Control
         public ObservableCollection<TreeViewItem> RootItems { get; } 
             = new ObservableCollection<TreeViewItem>();
 
-        private TreeViewItem _selectedItem;
-        public TreeViewItem SelectedItem
+        private TreeNodeData _selectedItem;
+
+        // capture selected node changes
+        public TreeNodeData SelectedItem
         {
             get => _selectedItem;
             set
@@ -30,14 +32,14 @@ namespace vs2026_plugin.UI.Control
             }
         }
 
-        private readonly XygeniIssueService _issueService;
-        private readonly XygeniScannerService _scannerService;
-
         public event Action<IXygeniIssue> IssueSelected;
 
         public event PropertyChangedEventHandler PropertyChanged;
         private void OnPropertyChanged(string name)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        private readonly XygeniIssueService _issueService;
+        private readonly XygeniScannerService _scannerService;
 
         public XygeniExplorerViewModel(
             XygeniIssueService issueService,
@@ -53,7 +55,6 @@ namespace vs2026_plugin.UI.Control
             {
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
                 RootItems.Clear();
-                vs2026_pluginPackage.Instance?.Logger?.Log("Refreshing Xygeni Explorer");
 
                 // 1. Scan Executions
                 var scansRoot = new TreeViewItem { Header = "Scan Executions", IsExpanded = true };
@@ -79,7 +80,6 @@ namespace vs2026_plugin.UI.Control
 
                 foreach (var group in categories)
                 {
-                    vs2026_pluginPackage.Instance?.Logger?.Log("Refreshing Xygeni category: " + group.Key);
                     var catNode = new TreeViewItem 
                     {
                         Header = new TreeNodeData(
@@ -91,8 +91,6 @@ namespace vs2026_plugin.UI.Control
 
                     foreach (var issue in group.OrderBy(i => i.GetSeverityLevel()))
                     {
-                        vs2026_pluginPackage.Instance?.Logger?.Log("Refreshing Xygeni item: " + issue.Type);
-                    
                         var issueNodeData = new TreeNodeData(
                             $"[{issue.Severity}] {issue.Type} - {Path.GetFileName(issue.File)}:{issue.BeginLine}",
                             GetSeverityIcon(issue.Severity),
@@ -109,14 +107,14 @@ namespace vs2026_plugin.UI.Control
                     issuesRoot.Items.Add(catNode);
                 }
 
-                 vs2026_pluginPackage.Instance?.Logger?.Log("issuesRoot: " + issuesRoot.Items.Count);
-
                 RootItems.Add(issuesRoot);
             });
         }
 
-        private void OnSelectedItemChanged(TreeViewItem node)
+        private void OnSelectedItemChanged(TreeNodeData node)
         {
+            if (node == null) return;
+
             if (node?.Tag is IXygeniIssue issue)
             {
                 IssueSelected?.Invoke(issue);

@@ -27,6 +27,8 @@ namespace vs2026_plugin.UI.Control
                 var env = await CoreWebView2Environment.CreateAsync(userDataFolder: folder);
                 await webView.EnsureCoreWebView2Async(env);
                 
+                webView.DefaultBackgroundColor = System.Drawing.Color.Transparent;
+
                 webView.WebMessageReceived += WebView_WebMessageReceived;
 
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();

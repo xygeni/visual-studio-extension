@@ -43,7 +43,7 @@ namespace vs2026_plugin.Services
             }            
 
 
-            _logger.Log($"Run remediation for kind {kind}");
+            _logger.Log($"Run remediation for kind {kind} issueId {issueId} fileUri {fileUri}");
 
             switch (kind)
             {
@@ -55,9 +55,9 @@ namespace vs2026_plugin.Services
                 case "misconfiguration":
                 case "iac_flaw":
                     _logger.Log($"Remediation preview not supported for {kind}");
-                    return new FixData { TempFile = null, Explanation = null };
+                    return new FixData { IssueTitle = "", TempFile = null, Explanation = null };
                 default:
-                    return new FixData { TempFile = null, Explanation = null };
+                    return new FixData { IssueTitle = "", TempFile = null, Explanation = null };
             }
         }
 
@@ -65,7 +65,7 @@ namespace vs2026_plugin.Services
         {
             try
             {
-                if (string.IsNullOrEmpty(issueId)) return new FixData { TempFile = null, Explanation = null };
+                if (string.IsNullOrEmpty(issueId)) return new FixData { IssueTitle = "", TempFile = null, Explanation = null };
 
                 var issueService = XygeniIssueService.GetInstance();
                 var issue = issueService.FindIssueById(issueId);
@@ -106,7 +106,7 @@ namespace vs2026_plugin.Services
 
                 // Return fix data            
                 const string explanation = "No explanation available";
-                return new FixData { TempFile = tempFile, Explanation = explanation };
+                return new FixData { IssueTitle = issue.Type, TempFile = tempFile, Explanation = explanation };
             }
             catch (Exception ex)
             {
@@ -119,7 +119,7 @@ namespace vs2026_plugin.Services
         {
             try
             {
-                if (string.IsNullOrEmpty(issueId)) return new FixData { TempFile = null, Explanation = null };
+                if (string.IsNullOrEmpty(issueId)) return new FixData { IssueTitle = "", TempFile = null, Explanation = null };
 
                 var issueService = XygeniIssueService.GetInstance();
                 var vulnIssue = issueService.FindIssueById(issueId) as VulnXygeniIssue;
@@ -165,7 +165,7 @@ namespace vs2026_plugin.Services
 
                 // Return fix data            
                 const string explanation = "No explanation available";
-                return new FixData { TempFile = tempFile, Explanation = explanation };
+                return new FixData { IssueTitle = "", TempFile = tempFile, Explanation = explanation };
             }
             catch (Exception ex)
             {

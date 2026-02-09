@@ -72,6 +72,9 @@ namespace vs2026_plugin.Services
 
         public async Task InstallAsync(string apiUrl = null, string token = null, bool overrideInstallation = false)
         {
+
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            
             Status = "running";
             IsInstalled = false;
             InstallationRunning = true;
@@ -84,6 +87,9 @@ namespace vs2026_plugin.Services
 
             try
             {
+                
+
+
                 string installPath = GetScannerInstallationDir();
                 _logger.Log($"    Installing Xygeni at directory: {installPath}");
 
@@ -95,25 +101,31 @@ namespace vs2026_plugin.Services
 
                 try
                 {
-                    await DownloadFileAsync(scannerUrl, zipPath);
-
-                    string checksumPath = zipPath + ".sha256";
-                    await DownloadFileAsync(XygeniScannerChecksumUrl, checksumPath);
-
-                    string checksumFileContent = await ReadAllTextAsync(checksumPath);
-                    string expectedChecksum = checksumFileContent.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)[0];
-                    string actualChecksum = await CalculateChecksumAsync(zipPath);
-
-                    if (!string.Equals(expectedChecksum, actualChecksum, StringComparison.OrdinalIgnoreCase))
+                    // ensure install tasks is not in the UI thread
+                    await Task.Run(async () =>
                     {
-                        throw new Exception($"Checksum validation failed. Expected: {expectedChecksum}, Got: {actualChecksum}");
-                    }
+                        await DownloadFileAsync(scannerUrl, zipPath).ConfigureAwait(false);
 
-                    await Task.Run(() => ZipFile.ExtractToDirectory(zipPath, tempDirPath));
+                        string checksumPath = zipPath + ".sha256";
+                        await DownloadFileAsync(XygeniScannerChecksumUrl, checksumPath).ConfigureAwait(false);
 
-                    string extractedRoot = Path.Combine(tempDirPath, XygeniScannerZipRootFolder);
-                    if (Directory.Exists(extractedRoot))
-                    {
+                        string checksumFileContent = await ReadAllTextAsync(checksumPath).ConfigureAwait(false);
+                        string expectedChecksum = checksumFileContent.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)[0];
+                        string actualChecksum = await CalculateChecksumAsync(zipPath);
+
+                        if (!string.Equals(expectedChecksum, actualChecksum, StringComparison.OrdinalIgnoreCase))
+                        {
+                            throw new Exception($"Checksum validation failed. Expected: {expectedChecksum}, Got: {actualChecksum}");
+                        }
+
+                        await Task.Run(() => ZipFile.ExtractToDirectory(zipPath, tempDirPath));
+
+                        string extractedRoot = Path.Combine(tempDirPath, XygeniScannerZipRootFolder);
+                        if (!Directory.Exists(extractedRoot))
+                        {
+                             throw new Exception($"Expected root folder {XygeniScannerZipRootFolder} not found in the zip file.");
+                        }
+
                         if (Directory.Exists(installPath))
                         {
                             Directory.Delete(installPath, true);
@@ -124,15 +136,16 @@ namespace vs2026_plugin.Services
 
                         _logger.Log("");
                         _logger.Log("      Xygeni Scanner installed successfully ");
-                        _logger.Log("==================================================");
+                        _logger.Log("==================================================");                                               
 
-                        Status = "success";
-                    }
-                    else
-                    {
-                        throw new Exception($"Expected root folder {XygeniScannerZipRootFolder} not found in the zip file.");
-                    }
+                    }).ConfigureAwait(false);
+
+                    // Switch back to UI thread for state updates
+                    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+                    Status = "success";
                     IsInstalled = true;
+
                 }
                 finally
                 {
