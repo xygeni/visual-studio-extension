@@ -35,6 +35,7 @@
         <TreeView x:Name="ExplorerTree"
           Grid.Row="1"
           ItemsSource="{Binding RootItems}"
+          PreviewMouseLeftButtonDown="ExplorerTree_PreviewMouseLeftButtonDown"
           SelectedItemChanged="ExplorerTree_SelectedItemChanged">
 
             <TreeView.Resources>

@@ -6,7 +6,7 @@ using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using vs2026_plugin.Services;
 using System.IO;
-using Task = System.Threading.Tasks.Task;
+using System.Threading.Tasks;
 
 
 

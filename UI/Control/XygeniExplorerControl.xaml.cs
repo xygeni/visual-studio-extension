@@ -3,6 +3,8 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using Microsoft.VisualStudio.Shell;
 using vs2026_plugin.Services;
 using vs2026_plugin.Models;
@@ -103,6 +105,36 @@ namespace vs2026_plugin.UI.Control
                     _vm.SelectedItem = null;
                 }
             }
+        }
+
+        private void ExplorerTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (_vm == null) return;
+
+            var clickedContainer = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
+            if (clickedContainer?.DataContext is TreeNodeData nodeData &&
+                nodeData.Tag is IXygeniIssue)
+            {
+                // Force issue-row selection to avoid the category container keeping selection.
+                clickedContainer.IsSelected = true;
+                clickedContainer.Focus();
+                e.Handled = true;
+            }
+        }
+
+        private static T FindVisualParent<T>(DependencyObject child) where T : DependencyObject
+        {
+            while (child != null)
+            {
+                if (child is T typedParent)
+                {
+                    return typedParent;
+                }
+
+                child = VisualTreeHelper.GetParent(child);
+            }
+
+            return null;
         }
 
         
