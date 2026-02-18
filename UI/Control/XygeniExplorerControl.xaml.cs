@@ -40,7 +40,6 @@ namespace vs2026_plugin.UI.Control
     {
         private readonly XygeniIssueService _issueService;
         private readonly XygeniScannerService _scannerService;
-        private readonly XygeniInstallerService _installerService;
 
         private readonly XygeniExplorerViewModel _vm;
 
@@ -49,16 +48,18 @@ namespace vs2026_plugin.UI.Control
             InitializeComponent();
             SetRunButtonIcon();
 
-            var issueService = XygeniIssueService.GetInstance();
-            var scannerService = XygeniScannerService.GetInstance();
+            _issueService = XygeniIssueService.GetInstance();
+            _scannerService = XygeniScannerService.GetInstance();
 
-            _vm = new XygeniExplorerViewModel(issueService, scannerService);
+            _vm = new XygeniExplorerViewModel(_issueService, _scannerService);
 
             DataContext = _vm;
 
             _vm.IssueSelected += OnIssueSelected;
-            issueService.IssuesChanged += OnIssuesChanged;
-            
+            _issueService.IssuesChanged += OnIssuesChanged;
+            _scannerService.Changed += OnScannerChanged;
+
+            _vm.Refresh();
         }
 
         private void SetRunButtonIcon()
@@ -78,7 +79,11 @@ namespace vs2026_plugin.UI.Control
             _vm.Refresh();
         }
 
-       
+        private async void OnScannerChanged(object sender, EventArgs e)
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            _vm.Refresh();
+        }
 
               
 
