@@ -42,6 +42,7 @@ namespace vs2026_plugin
         /// </summary>
         public const string PackageGuidString = "b441d6b9-1770-4351-826d-479748bb2ff9";
         private static readonly Guid XygeniOutputPaneGuid = new Guid("D0E6C712-4B6A-4A73-9095-2BB6E30D42A9");
+        private static readonly Guid OutputToolWindowGuid = new Guid("34E76E81-EE4A-11D0-AE2E-00A0C90FFFC3");
 
         public static vs2026_pluginPackage Instance { get; private set; }
 
@@ -90,11 +91,31 @@ namespace vs2026_plugin
         public async Task ShowOutputPaneAsync()
         {
             await JoinableTaskFactory.SwitchToMainThreadAsync(DisposalToken);
+            await ShowOutputToolWindowAsync();
             if (_outputPane == null)
             {
                 _outputPane = await GetOrCreateOutputPaneAsync();
             }
             _outputPane?.Activate();
+        }
+
+        private async Task ShowOutputToolWindowAsync()
+        {
+            await JoinableTaskFactory.SwitchToMainThreadAsync(DisposalToken);
+
+            IVsUIShell uiShell = await GetServiceAsync(typeof(SVsUIShell)) as IVsUIShell;
+            if (uiShell == null)
+            {
+                return;
+            }
+
+            Guid outputWindowGuid = OutputToolWindowGuid;
+            IVsWindowFrame outputFrame;
+            int hr = uiShell.FindToolWindow(0, ref outputWindowGuid, out outputFrame);
+            if (ErrorHandler.Succeeded(hr) && outputFrame != null)
+            {
+                ErrorHandler.ThrowOnFailure(outputFrame.Show());
+            }
         }
 
         private async Task<IVsOutputWindowPane> GetOrCreateOutputPaneAsync()
