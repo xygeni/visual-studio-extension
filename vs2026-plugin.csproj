@@ -74,6 +74,7 @@
     <Compile Include="Models\SecretsXygeniIssue.cs" />
     <Compile Include="Models\VulnXygeniIssue.cs" />
     <Compile Include="Services\IssueDetailsService.cs" />
+    <Compile Include="Editor\XygeniIssueLineDecorator.cs" />
     <Compile Include="UI\Window\IssueDetailsToolWindow.cs" />
     <Compile Include="UI\Control\ApplyChangesDialog.xaml.cs">
       <DependentUpon>ApplyChangesDialog.xaml</DependentUpon>
