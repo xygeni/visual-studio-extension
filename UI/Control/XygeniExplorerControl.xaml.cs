@@ -12,6 +12,7 @@ using vs2026_plugin.Services;
 using vs2026_plugin.Models;
 using vs2026_plugin.Commands;
 using System.Reflection;
+using System.Windows.Media.Imaging;
 
 
 namespace vs2026_plugin.UI.Control
@@ -46,6 +47,7 @@ namespace vs2026_plugin.UI.Control
         public XygeniExplorerControl()
         {
             InitializeComponent();
+            SetRunButtonIcon();
 
             var issueService = XygeniIssueService.GetInstance();
             var scannerService = XygeniScannerService.GetInstance();
@@ -57,6 +59,17 @@ namespace vs2026_plugin.UI.Control
             _vm.IssueSelected += OnIssueSelected;
             issueService.IssuesChanged += OnIssuesChanged;
             
+        }
+
+        private void SetRunButtonIcon()
+        {
+            string baseDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            string iconPath = Path.Combine(baseDir, "media", "icons", "play.png");
+
+            if (File.Exists(iconPath))
+            {
+                RunScanIcon.Source = new BitmapImage(new Uri(iconPath, UriKind.Absolute));
+            }
         }
 
         private async void OnIssuesChanged(object sender, EventArgs e)

@@ -74,7 +74,7 @@
         <ToolBar Band="0" Background="Transparent" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowBorderBrushKey}}">
            
             <Button x:Name="RunScanBtn" Click="RunScanBtn_Click" ToolTip="Run Scan">
-                <Image Source="media\icons\play.png" Width="16" Height="16"/>
+                <Image x:Name="RunScanIcon" Width="16" Height="16"/>
             </Button>
         </ToolBar>
 
