@@ -129,7 +129,10 @@ namespace vs2026_plugin.UI.Control
             _configurationService.SaveToken(ApiTokenTxt.Password);
 
             // Show Log Output
-            vs2026_pluginPackage.Instance?.Logger?.Show();
+            if (vs2026_pluginPackage.Instance != null)
+            {
+                _ = vs2026_pluginPackage.Instance.ShowOutputPaneAsync();
+            }
             
             // Run Installation
             string apiUrl = ApiUrlTxt.Text;
@@ -175,7 +178,10 @@ namespace vs2026_plugin.UI.Control
         private void OpenOutputBtn_Click(object sender, RoutedEventArgs e)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
-            vs2026_pluginPackage.Instance?.Logger?.Show();
+            if (vs2026_pluginPackage.Instance != null)
+            {
+                _ = vs2026_pluginPackage.Instance.ShowOutputPaneAsync();
+            }
         }
 
         private void OpenXygeniExplorerBtn_Click(object sender, RoutedEventArgs e)
