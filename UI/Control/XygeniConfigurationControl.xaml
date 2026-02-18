@@ -5,10 +5,9 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:vsshell="clr-namespace:Microsoft.VisualStudio.PlatformUI;assembly=Microsoft.VisualStudio.Shell.15.0"
              mc:Ignorable="d" 
-             d:DesignHeight="300" d:DesignWidth="300">
-    
+             d:DesignHeight="420" d:DesignWidth="350">
+
     <UserControl.Resources>
-        <!-- Style for the button -->
         <Style x:Key="StyledButton" TargetType="Button">
             <Setter Property="Background" Value="#2D2D30"/>
             <Setter Property="Foreground" Value="White"/>
@@ -30,9 +29,7 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <!-- Icon -->
                             <Image Source="media\icons\play.png" Width="20" Height="20" VerticalAlignment="Center" HorizontalAlignment="Center" />
-                            <!-- Text -->
                             <TextBlock Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="10,0,0,0" Text="{TemplateBinding Content}" />
                         </Grid>
                     </ControlTemplate>
@@ -41,40 +38,64 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Margin="10">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-        
-        <TextBlock Text="Xygeni API URL" Margin="0,0,0,5" FontWeight="Bold" Grid.Row="0"
-        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
-        <TextBox x:Name="ApiUrlTxt" Margin="0,0,0,10" Grid.Row="1" Width="300" HorizontalAlignment="Left"/>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="10">
+            <TextBlock Text="Xygeni API URL" Margin="0,0,0,5" FontWeight="Bold"
+                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+            <TextBox x:Name="ApiUrlTxt" Margin="0,0,0,10" Width="320" HorizontalAlignment="Left"/>
 
-        <TextBlock Text="Xygeni API Token" Margin="0,0,0,5" FontWeight="Bold" Grid.Row="2"
-        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
-        <PasswordBox x:Name="ApiTokenTxt" Margin="0,0,0,10" Grid.Row="3" Width="300" HorizontalAlignment="Left"/>
+            <TextBlock Text="Xygeni API Token" Margin="0,0,0,5" FontWeight="Bold"
+                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+            <PasswordBox x:Name="ApiTokenTxt" Margin="0,0,0,10" Width="320" HorizontalAlignment="Left"/>
 
-        <StackPanel Orientation="Horizontal" Grid.Row="4" Margin="0,0,0,10">
-            <TextBlock Text="Xygeni Scanner Status: " 
-             Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
-            <TextBlock x:Name="StatusTxt" Padding="5 1 5 1" FontWeight="Bold" Text="not installed" Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
-        </StackPanel>
-        
-        <StackPanel Orientation="Horizontal" Grid.Row="5" Margin="0,0,0,0">
-            <Button x:Name="SaveBtn" Content="Save &amp; Install" Width="120" Margin="0,0,10,0" Click="SaveBtn_Click" />
-            <Button Style="{StaticResource StyledButton}" x:Name="RunScanBtn" Content="Run Scan" Width="120" Click="RunScanBtn_Click" Margin="0,0,10,0" IsEnabled="False"/>
-            <Button x:Name="OpenXygeniExplorerBtn" Content="Open Xygeni Explorer" Width="130" Margin="0,0,10,0" Click="OpenXygeniExplorerBtn_Click" IsEnabled="True"/>
-        </StackPanel>
+            <Separator Margin="0,4,0,8"/>
 
-        <StackPanel Grid.Row="7">
-            <TextBlock x:Name="OpenOutputBtn" 
-               Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}">
+            <TextBlock Text="Local Proxy Settings (Optional)" Margin="0,0,0,6" FontWeight="Bold"
+                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+
+            <TextBlock Text="Protocol (for example: http, https)" Margin="0,0,0,3"
+                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+            <TextBox x:Name="ProxyProtocolTxt" Margin="0,0,0,8" Width="320" HorizontalAlignment="Left"/>
+
+            <TextBlock Text="Host" Margin="0,0,0,3"
+                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+            <TextBox x:Name="ProxyHostTxt" Margin="0,0,0,8" Width="320" HorizontalAlignment="Left"/>
+
+            <TextBlock Text="Port" Margin="0,0,0,3"
+                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+            <TextBox x:Name="ProxyPortTxt" Margin="0,0,0,8" Width="320" HorizontalAlignment="Left"/>
+
+            <TextBlock Text="Authentication" Margin="0,0,0,3"
+                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+            <TextBox x:Name="ProxyAuthenticationTxt" Margin="0,0,0,8" Width="320" HorizontalAlignment="Left"/>
+
+            <TextBlock Text="Username" Margin="0,0,0,3"
+                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+            <TextBox x:Name="ProxyUsernameTxt" Margin="0,0,0,8" Width="320" HorizontalAlignment="Left"/>
+
+            <TextBlock Text="Password" Margin="0,0,0,3"
+                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+            <PasswordBox x:Name="ProxyPasswordTxt" Margin="0,0,0,8" Width="320" HorizontalAlignment="Left"/>
+
+            <TextBlock Text="Non-proxy hosts (comma-separated)" Margin="0,0,0,3"
+                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+            <TextBox x:Name="ProxyNonProxyHostsTxt" Margin="0,0,0,12" Width="320" HorizontalAlignment="Left"/>
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                <TextBlock Text="Xygeni Scanner Status: "
+                    Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                <TextBlock x:Name="StatusTxt" Padding="5 1 5 1" FontWeight="Bold" Text="not installed"
+                    Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+            </StackPanel>
+
+            <WrapPanel Margin="0,0,0,10">
+                <Button x:Name="SaveBtn" Content="Save &amp; Install" Width="120" Margin="0,0,10,0" Click="SaveBtn_Click" />
+                <Button Style="{StaticResource StyledButton}" x:Name="RunScanBtn" Content="Run Scan" Width="120" Click="RunScanBtn_Click" Margin="0,0,10,0" IsEnabled="False"/>
+                <Button x:Name="OpenXygeniExplorerBtn" Content="Open Xygeni Explorer" Width="130" Margin="0,0,10,0" Click="OpenXygeniExplorerBtn_Click" IsEnabled="True"/>
+            </WrapPanel>
+
+            <TextBlock x:Name="OpenOutputBtn"
+                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}">
                 <Run Text="Open " />
                 <Hyperlink Click="OpenOutputBtn_Click">
                     <Run Text="Output Window" />
@@ -82,5 +103,5 @@
                 <Run Text=" to see the Xygeni operations output" />
             </TextBlock>
         </StackPanel>
-    </Grid>
+    </ScrollViewer>
 </UserControl>

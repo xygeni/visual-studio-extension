@@ -11,6 +11,7 @@ using System.Windows.Media;
 
 using vs2026_plugin.Services;
 using vs2026_plugin.Commands;
+using vs2026_plugin.Models;
 
 namespace vs2026_plugin.UI.Control
 {
@@ -19,8 +20,6 @@ namespace vs2026_plugin.UI.Control
     /// </summary>
     public partial class XygeniConfigurationControl : UserControl
     {
-        private const string CollectionPath = "XygeniConfiguration";
-        
         private readonly XygeniConfigurationService _configurationService;
         private readonly XygeniInstallerService _installerService;
         private readonly XygeniScannerService _scannerService;
@@ -62,6 +61,15 @@ namespace vs2026_plugin.UI.Control
             ThreadHelper.ThrowIfNotOnUIThread();
             ApiUrlTxt.Text = _configurationService.GetUrl();
             ApiTokenTxt.Password = _configurationService.GetToken();
+            var proxySettings = _configurationService.GetProxySettings();
+
+            ProxyProtocolTxt.Text = proxySettings.Protocol;
+            ProxyHostTxt.Text = proxySettings.Host;
+            ProxyPortTxt.Text = proxySettings.Port.HasValue ? proxySettings.Port.Value.ToString() : string.Empty;
+            ProxyAuthenticationTxt.Text = proxySettings.Authentication;
+            ProxyUsernameTxt.Text = proxySettings.Username;
+            ProxyPasswordTxt.Password = proxySettings.Password;
+            ProxyNonProxyHostsTxt.Text = proxySettings.NonProxyHosts;
 
             UpdateStatusText();
         }
@@ -91,8 +99,32 @@ namespace vs2026_plugin.UI.Control
 
         private void SaveBtn_Click(object sender, RoutedEventArgs e)
         {
-            ThreadHelper.ThrowIfNotOnUIThread();            
+            ThreadHelper.ThrowIfNotOnUIThread();
 
+            int? proxyPort = null;
+            if (!string.IsNullOrWhiteSpace(ProxyPortTxt.Text))
+            {
+                if (!int.TryParse(ProxyPortTxt.Text.Trim(), out int parsedPort) || parsedPort < 1 || parsedPort > 65535)
+                {
+                    MessageBox.Show("Proxy port must be a number between 1 and 65535.", "Xygeni Configuration", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                proxyPort = parsedPort;
+            }
+
+            var proxySettings = new ProxySettings
+            {
+                Protocol = NormalizeInput(ProxyProtocolTxt.Text),
+                Host = NormalizeInput(ProxyHostTxt.Text),
+                Port = proxyPort,
+                Authentication = NormalizeInput(ProxyAuthenticationTxt.Text),
+                Username = NormalizeInput(ProxyUsernameTxt.Text),
+                Password = ProxyPasswordTxt.Password ?? string.Empty,
+                NonProxyHosts = NormalizeInput(ProxyNonProxyHostsTxt.Text)
+            };
+
+            _configurationService.SaveProxySettings(proxySettings);
             _configurationService.SaveUrl(ApiUrlTxt.Text);
             _configurationService.SaveToken(ApiTokenTxt.Password);
 
@@ -153,6 +185,11 @@ namespace vs2026_plugin.UI.Control
             {
                 _ = vs2026_pluginPackage.Instance.ShowToolWindowAsync(typeof(vs2026_plugin.UI.Window.XygeniExplorerToolWindow), 0, true, vs2026_pluginPackage.Instance.DisposalToken);
             }
+        }
+
+        private string NormalizeInput(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
         }
 
         

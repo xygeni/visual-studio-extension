@@ -2,11 +2,13 @@ using System;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
+using System.Net;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using vs2026_plugin.Services;
+using vs2026_plugin.Models;
 
 namespace vs2026_plugin.Services
 {
@@ -15,7 +17,6 @@ namespace vs2026_plugin.Services
         private static XygeniInstallerService _instance;
         private readonly string _extensionPath;
         private readonly ILogger _logger;
-        private readonly HttpClient _httpClient;
 
         private const string XygeniGetScannerUrl = "https://get.xygeni.io/latest/scanner/";
         private const string XygeniScannerZipName = "xygeni_scanner.zip";
@@ -35,7 +36,6 @@ namespace vs2026_plugin.Services
         {
             _extensionPath = extensionPath;
             _logger = logger;
-            _httpClient = new HttpClient();
             CheckScannerInstallation();
         }
 
@@ -201,13 +201,14 @@ namespace vs2026_plugin.Services
             string testApiUrl = $"{xygeniApiUrl.TrimEnd('/')}/language";
             try
             {
+                using (var httpClient = CreateHttpClient())
                 using (var request = new HttpRequestMessage(HttpMethod.Get, testApiUrl))
                 {
                     if (!string.IsNullOrEmpty(xygeniToken))
                     {
                         request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {xygeniToken}");
                     }
-                    var response = await _httpClient.SendAsync(request);
+                    var response = await httpClient.SendAsync(request);
                     return response.StatusCode == System.Net.HttpStatusCode.OK;
                 }
             }
@@ -223,8 +224,11 @@ namespace vs2026_plugin.Services
             string pingUrl = $"{xygeniApiUrl.TrimEnd('/')}/ping";
             try
             {
-                var response = await _httpClient.GetAsync(pingUrl);
-                return response.StatusCode == System.Net.HttpStatusCode.OK;
+                using (var httpClient = CreateHttpClient())
+                {
+                    var response = await httpClient.GetAsync(pingUrl);
+                    return response.StatusCode == System.Net.HttpStatusCode.OK;
+                }
             }
             catch (Exception ex)
             {
@@ -235,7 +239,8 @@ namespace vs2026_plugin.Services
 
         private async Task DownloadFileAsync(string url, string destinationPath)
         {
-            using (var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
+            using (var httpClient = CreateHttpClient())
+            using (var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
             {
                 response.EnsureSuccessStatusCode();
                 using (var stream = await response.Content.ReadAsStreamAsync())
@@ -279,6 +284,70 @@ namespace vs2026_plugin.Services
             {
                 return await reader.ReadToEndAsync();
             }
+        }
+
+        private HttpClient CreateHttpClient()
+        {
+            var handler = new HttpClientHandler();
+            var proxySettings = GetProxySettingsSafe();
+            var webProxy = BuildWebProxy(proxySettings);
+
+            if (webProxy != null)
+            {
+                handler.Proxy = webProxy;
+                handler.UseProxy = true;
+            }
+            else
+            {
+                handler.UseProxy = false;
+            }
+
+            return new HttpClient(handler, disposeHandler: true);
+        }
+
+        private ProxySettings GetProxySettingsSafe()
+        {
+            try
+            {
+                return XygeniConfigurationService.GetInstance().GetProxySettings();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private IWebProxy BuildWebProxy(ProxySettings proxySettings)
+        {
+            if (proxySettings == null || string.IsNullOrWhiteSpace(proxySettings.Host))
+            {
+                return null;
+            }
+
+            string protocol = string.IsNullOrWhiteSpace(proxySettings.Protocol) ? "http" : proxySettings.Protocol.Trim();
+            string host = proxySettings.Host.Trim();
+            string proxyUri = proxySettings.Port.HasValue
+                ? $"{protocol}://{host}:{proxySettings.Port.Value}"
+                : $"{protocol}://{host}";
+
+            var webProxy = new WebProxy(proxyUri);
+
+            if (!string.IsNullOrWhiteSpace(proxySettings.Username))
+            {
+                webProxy.Credentials = new NetworkCredential(proxySettings.Username.Trim(), proxySettings.Password ?? string.Empty);
+            }
+            else if (string.Equals(proxySettings.Authentication, "default", StringComparison.OrdinalIgnoreCase))
+            {
+                webProxy.Credentials = CredentialCache.DefaultCredentials;
+            }
+
+            if (!string.IsNullOrWhiteSpace(proxySettings.NonProxyHosts))
+            {
+                webProxy.BypassList = proxySettings.NonProxyHosts
+                    .Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            }
+
+            return webProxy;
         }
 
         private void OnChanged()

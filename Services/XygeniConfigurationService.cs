@@ -9,6 +9,7 @@ using System.Linq;
 using EnvDTE80;
 using EnvDTE;
 using System.Collections.Generic;
+using vs2026_plugin.Models;
 
 namespace vs2026_plugin.Services
 {
@@ -17,6 +18,13 @@ namespace vs2026_plugin.Services
         private const string CollectionPath = "XygeniConfiguration";
         private const string ApiUrlKey = "ApiUrl";
         private const string TokenKey = "ApiToken";
+        private const string ProxyProtocolKey = "ProxyProtocol";
+        private const string ProxyHostKey = "ProxyHost";
+        private const string ProxyPortKey = "ProxyPort";
+        private const string ProxyAuthenticationKey = "ProxyAuthentication";
+        private const string ProxyUsernameKey = "ProxyUsername";
+        private const string ProxyPasswordKey = "ProxyPassword";
+        private const string ProxyNonProxyHostsKey = "ProxyNonProxyHosts";
         private const string MetadataFolderKey = ".xygenidata";
 
         private readonly SettingsManager _settingsManager;
@@ -77,22 +85,55 @@ namespace vs2026_plugin.Services
 
         public void SaveUrl(string url)
         {
-            var store = _settingsManager.GetWritableSettingsStore(SettingsScope.UserSettings);
-            if (!store.CollectionExists(CollectionPath))
-            {
-                store.CreateCollection(CollectionPath);
-            }
+            var store = GetWritableStore();
             store.SetString(CollectionPath, ApiUrlKey, url);
         }
 
         public void SaveToken(string token)
         {
-            var store = _settingsManager.GetWritableSettingsStore(SettingsScope.UserSettings);
+            var store = GetWritableStore();
+            store.SetString(CollectionPath, TokenKey, token);
+        }
+
+        public ProxySettings GetProxySettings()
+        {
+            var store = _settingsManager.GetReadOnlySettingsStore(SettingsScope.UserSettings);
             if (!store.CollectionExists(CollectionPath))
             {
-                store.CreateCollection(CollectionPath);
+                return new ProxySettings();
             }
-            store.SetString(CollectionPath, TokenKey, token);
+
+            var proxySettings = new ProxySettings
+            {
+                Protocol = store.GetString(CollectionPath, ProxyProtocolKey, string.Empty),
+                Host = store.GetString(CollectionPath, ProxyHostKey, string.Empty),
+                Authentication = store.GetString(CollectionPath, ProxyAuthenticationKey, string.Empty),
+                Username = store.GetString(CollectionPath, ProxyUsernameKey, string.Empty),
+                Password = store.GetString(CollectionPath, ProxyPasswordKey, string.Empty),
+                NonProxyHosts = store.GetString(CollectionPath, ProxyNonProxyHostsKey, string.Empty)
+            };
+
+            var proxyPort = store.GetString(CollectionPath, ProxyPortKey, string.Empty);
+            if (int.TryParse(proxyPort, out int parsedPort))
+            {
+                proxySettings.Port = parsedPort;
+            }
+
+            return proxySettings;
+        }
+
+        public void SaveProxySettings(ProxySettings proxySettings)
+        {
+            var settings = proxySettings ?? new ProxySettings();
+            var store = GetWritableStore();
+
+            store.SetString(CollectionPath, ProxyProtocolKey, NormalizeSetting(settings.Protocol));
+            store.SetString(CollectionPath, ProxyHostKey, NormalizeSetting(settings.Host));
+            store.SetString(CollectionPath, ProxyPortKey, settings.Port.HasValue ? settings.Port.Value.ToString() : string.Empty);
+            store.SetString(CollectionPath, ProxyAuthenticationKey, NormalizeSetting(settings.Authentication));
+            store.SetString(CollectionPath, ProxyUsernameKey, NormalizeSetting(settings.Username));
+            store.SetString(CollectionPath, ProxyPasswordKey, settings.Password ?? string.Empty);
+            store.SetString(CollectionPath, ProxyNonProxyHostsKey, NormalizeSetting(settings.NonProxyHosts));
         }
 
         public void ClearCache() {
@@ -358,6 +399,22 @@ namespace vs2026_plugin.Services
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
             return !string.IsNullOrEmpty(solution.FullName) && !solution.IsDirty && projects.Count > 0;
+        }
+
+        private WritableSettingsStore GetWritableStore()
+        {
+            var store = _settingsManager.GetWritableSettingsStore(SettingsScope.UserSettings);
+            if (!store.CollectionExists(CollectionPath))
+            {
+                store.CreateCollection(CollectionPath);
+            }
+
+            return store;
+        }
+
+        private string NormalizeSetting(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
         }
 
 
