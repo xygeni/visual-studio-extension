@@ -221,9 +221,9 @@ namespace vs2026_plugin.Editor
                 Margin = new Thickness(12, 0, 0, 0)
             };
 
-            var borderColor = VSColorTheme.GetThemedColor(EnvironmentColors.ToolWindowBorderColorKey);
-            var foregroundColor = VSColorTheme.GetThemedColor(EnvironmentColors.ToolWindowTextColorKey);
-            var backgroundColor = VSColorTheme.GetThemedColor(EnvironmentColors.ToolWindowBackgroundColorKey);
+            var borderColor = ToMediaColor(VSColorTheme.GetThemedColor(EnvironmentColors.ToolWindowBorderColorKey));
+            var foregroundColor = ToMediaColor(VSColorTheme.GetThemedColor(EnvironmentColors.ToolWindowTextColorKey));
+            var backgroundColor = ToMediaColor(VSColorTheme.GetThemedColor(EnvironmentColors.ToolWindowBackgroundColorKey));
 
             foreach (var issue in issuesForLine)
             {
@@ -374,6 +374,11 @@ namespace vs2026_plugin.Editor
             {
                 return null;
             }
+        }
+
+        private static Color ToMediaColor(System.Drawing.Color color)
+        {
+            return Color.FromArgb(color.A, color.R, color.G, color.B);
         }
     }
 }
