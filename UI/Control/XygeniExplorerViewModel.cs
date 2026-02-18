@@ -1,7 +1,5 @@
 using System.Collections.ObjectModel;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Windows.Controls;
 using System.IO;
 using System.Linq;
 using System;
@@ -15,8 +13,8 @@ namespace vs2026_plugin.UI.Control
 {
     public class XygeniExplorerViewModel : INotifyPropertyChanged
     {
-        public ObservableCollection<TreeViewItem> RootItems { get; } 
-            = new ObservableCollection<TreeViewItem>();
+        public ObservableCollection<TreeNodeData> RootItems { get; } 
+            = new ObservableCollection<TreeNodeData>();
 
         private TreeNodeData _selectedItem;
 
@@ -57,22 +55,27 @@ namespace vs2026_plugin.UI.Control
                 RootItems.Clear();
 
                 // 1. Scan Executions
-                var scansRoot = new TreeViewItem { Header = "Scan Executions", IsExpanded = true };
+                var scansRoot = new TreeNodeData("Scan Executions")
+                {
+                    IsExpanded = true
+                };
 
                 foreach (var scan in _scannerService.GetScans()
                             .OrderByDescending(s => s.Timestamp))
                 {
-                    scansRoot.Items.Add(new TreeViewItem 
-                        { 
-                            Header = $"[{scan.Timestamp:HH:mm:ss}] {scan.Status} {scan.Summary}",
-                            Tag = scan
-                        });
+                    scansRoot.Items.Add(new TreeNodeData(
+                        $"[{scan.Timestamp:HH:mm:ss}] {scan.Status} {scan.Summary}",
+                        tag: scan
+                    ));
                 }
 
                 RootItems.Add(scansRoot);
 
                 // 2. Issues by Category
-                var issuesRoot = new TreeViewItem { Header = "Issues by Category", IsExpanded = true };
+                var issuesRoot = new TreeNodeData("Issues by Category")
+                {
+                    IsExpanded = true
+                };
 
                 var categories = _issueService.GetIssues()
                     .GroupBy(i => i.CategoryName)
@@ -80,14 +83,11 @@ namespace vs2026_plugin.UI.Control
 
                 foreach (var group in categories)
                 {
-                    var catNode = new TreeViewItem 
-                    {
-                        Header = new TreeNodeData(
-                            $"{group.Key} ({group.Count()})",
-                            GetCategoryIcon(group.Key)
-                        ),
-                        Tag = group
-                    };
+                    var catNode = new TreeNodeData(
+                        $"{group.Key} ({group.Count()})",
+                        GetCategoryIcon(group.Key),
+                        group
+                    );
 
                     foreach (var issue in group.OrderBy(i => i.GetSeverityLevel()))
                     {
@@ -96,12 +96,7 @@ namespace vs2026_plugin.UI.Control
                             GetSeverityIcon(issue.Severity),
                             issue
                         );
-                        var issueItem = new TreeViewItem 
-                        { 
-                            Header = issueNodeData,
-                            Tag = issue
-                        };
-                        catNode.Items.Add(issueItem);
+                        catNode.Items.Add(issueNodeData);
                     }
 
                     issuesRoot.Items.Add(catNode);

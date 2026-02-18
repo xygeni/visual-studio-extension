@@ -1,12 +1,8 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.IO;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using Microsoft.VisualStudio.Shell;
 using vs2026_plugin.Services;
 using vs2026_plugin.Models;
@@ -23,6 +19,7 @@ namespace vs2026_plugin.UI.Control
         public string IconPath { get; set; }
         public string DisplayText { get; set; }
         public object Tag { get; set; }
+        public bool IsExpanded { get; set; }
 
         public ObservableCollection<TreeNodeData> Items { get; } 
             = new ObservableCollection<TreeNodeData>();
@@ -97,7 +94,7 @@ namespace vs2026_plugin.UI.Control
         {
             if (_vm != null)
             {
-                if (e.NewValue is TreeViewItem item && item.Header is TreeNodeData nodeData)
+                if (e.NewValue is TreeNodeData nodeData)
                 {
                     _vm.SelectedItem = nodeData;
                 }
