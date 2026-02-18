@@ -18,10 +18,13 @@ using vs2026_plugin.Services;
 
 namespace vs2026_plugin.Editor
 {
-    [Export(typeof(AdornmentLayerDefinition))]
-    [Name(XygeniIssueLineDecorator.LayerName)]
-    [Order(After = PredefinedAdornmentLayers.TextMarker, Before = PredefinedAdornmentLayers.Caret)]
-    internal AdornmentLayerDefinition xygeniIssueLineDecoratorLayer;
+    internal static class XygeniIssueLineDecoratorDefinitions
+    {
+        [Export(typeof(AdornmentLayerDefinition))]
+        [Name(XygeniIssueLineDecorator.LayerName)]
+        [Order(After = PredefinedAdornmentLayers.TextMarker, Before = PredefinedAdornmentLayers.Caret)]
+        internal static AdornmentLayerDefinition XygeniIssueLineDecoratorLayer;
+    }
 
     [Export(typeof(IWpfTextViewCreationListener))]
     [ContentType("text")]
