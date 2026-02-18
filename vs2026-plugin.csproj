@@ -66,6 +66,7 @@
     <Compile Include="Services\XygeniIssueService.cs" />
     <Compile Include="Services\RemediationService.cs" />
     <Compile Include="Models\FixData.cs" />
+    <Compile Include="Models\ProxySettings.cs" />
     <Compile Include="Models\XygeniIssue.cs" />
     <Compile Include="Models\IaCXygeniIssue.cs" />
     <Compile Include="Models\MisconfXygeniIssue.cs" />
