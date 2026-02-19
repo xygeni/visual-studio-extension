@@ -19,14 +19,19 @@ namespace vs2026_plugin.Editor
         [Import]
         internal ITextDocumentFactoryService TextDocumentFactoryService = null;
 
-        public ITagger<T> CreateTagger<T>(IWpfTextView textView, ITextBuffer buffer) where T : ITag
+        public ITagger<T> CreateTagger<T>(ITextView textView, ITextBuffer buffer) where T : ITag
         {
             if (textView == null || buffer == null || textView.TextBuffer != buffer)
             {
                 return null;
             }
 
-            return new XygeniIssueErrorTagger(textView, buffer, TextDocumentFactoryService) as ITagger<T>;
+            if (!(textView is IWpfTextView wpfTextView))
+            {
+                return null;
+            }
+
+            return new XygeniIssueErrorTagger(wpfTextView, buffer, TextDocumentFactoryService) as ITagger<T>;
         }
     }
 
@@ -74,7 +79,7 @@ namespace vs2026_plugin.Editor
                 yield break;
             }
 
-            IReadOnlyList<XygeniIssueLocation> issueLocations = _errorListService.GetIssueLocationsForDocument(currentFilePath);
+            IReadOnlyList<vs2026_plugin.Services.XygeniIssueLocation> issueLocations = _errorListService.GetIssueLocationsForDocument(currentFilePath);
             if (issueLocations == null || issueLocations.Count == 0)
             {
                 yield break;
@@ -194,7 +199,7 @@ namespace vs2026_plugin.Editor
             return null;
         }
 
-        private static bool TryCreateIssueSpan(ITextSnapshot snapshot, XygeniIssueLocation issueLocation, out SnapshotSpan issueSpan)
+        private static bool TryCreateIssueSpan(ITextSnapshot snapshot, vs2026_plugin.Services.XygeniIssueLocation issueLocation, out SnapshotSpan issueSpan)
         {
             issueSpan = default(SnapshotSpan);
 

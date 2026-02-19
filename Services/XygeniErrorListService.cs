@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Threading.Tasks;
 using EnvDTE;
 using Microsoft.VisualStudio.Shell;
 using vs2026_plugin.Models;
@@ -16,6 +15,10 @@ namespace vs2026_plugin.Services
         private readonly ILogger _logger;
         private readonly ErrorListProvider _errorListProvider;
         private readonly XygeniIssueService _issueService;
+        private readonly object _issueLocationGate = new object();
+        private List<XygeniIssueLocation> _issueLocations = new List<XygeniIssueLocation>();
+
+        public event EventHandler IssueLocationsChanged;
 
         private XygeniErrorListService(AsyncPackage package, ILogger logger)
         {
@@ -53,6 +56,12 @@ namespace vs2026_plugin.Services
             return _instance;
         }
 
+        public static bool TryGetInstance(out XygeniErrorListService instance)
+        {
+            instance = _instance;
+            return instance != null;
+        }
+
         private void OnIssuesChanged(object sender, EventArgs e)
         {
             ThreadHelper.JoinableTaskFactory.RunAsync(async delegate
@@ -68,6 +77,7 @@ namespace vs2026_plugin.Services
 
             var issues = _issueService.GetIssues() ?? new List<IXygeniIssue>();
             string rootDirectory = GetRootDirectorySafe();
+            var issueLocations = new List<XygeniIssueLocation>();
 
             _errorListProvider.SuspendRefresh();
 
@@ -94,12 +104,16 @@ namespace vs2026_plugin.Services
 
                     task.Navigate += OnNavigate;
                     _errorListProvider.Tasks.Add(task);
+
+                    issueLocations.Add(CreateIssueLocation(issue, task.Document));
                 }
             }
             finally
             {
                 _errorListProvider.ResumeRefresh();
             }
+
+            UpdateIssueLocations(issueLocations);
         }
 
         private void OnNavigate(object sender, EventArgs e)
@@ -189,6 +203,144 @@ namespace vs2026_plugin.Services
             }
 
             return issueFilePath;
+        }
+
+        public IReadOnlyList<XygeniIssueLocation> GetIssueLocationsForDocument(string documentPath)
+        {
+            string normalizedDocumentPath = NormalizePath(documentPath);
+            if (string.IsNullOrEmpty(normalizedDocumentPath))
+            {
+                return Array.Empty<XygeniIssueLocation>();
+            }
+
+            List<XygeniIssueLocation> issueLocationsSnapshot;
+            lock (_issueLocationGate)
+            {
+                issueLocationsSnapshot = new List<XygeniIssueLocation>(_issueLocations);
+            }
+
+            if (issueLocationsSnapshot.Count == 0)
+            {
+                return Array.Empty<XygeniIssueLocation>();
+            }
+
+            var matches = new List<XygeniIssueLocation>();
+
+            foreach (var issueLocation in issueLocationsSnapshot)
+            {
+                if (issueLocation == null)
+                {
+                    continue;
+                }
+
+                if (IsIssueForCurrentFile(issueLocation.OriginalPath, issueLocation.DocumentPath, normalizedDocumentPath))
+                {
+                    matches.Add(issueLocation);
+                }
+            }
+
+            return matches;
+        }
+
+        private void UpdateIssueLocations(List<XygeniIssueLocation> issueLocations)
+        {
+            lock (_issueLocationGate)
+            {
+                _issueLocations = issueLocations ?? new List<XygeniIssueLocation>();
+            }
+
+            IssueLocationsChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private static XygeniIssueLocation CreateIssueLocation(IXygeniIssue issue, string documentPath)
+        {
+            int beginLine = issue.BeginLine > 0 ? issue.BeginLine : 1;
+            int beginColumn = issue.BeginColumn > 0 ? issue.BeginColumn : 1;
+            int endLine = issue.EndLine >= beginLine ? issue.EndLine : beginLine;
+            int endColumn = issue.EndColumn > 0 ? issue.EndColumn : beginColumn + 1;
+
+            return new XygeniIssueLocation
+            {
+                OriginalPath = issue.File ?? string.Empty,
+                DocumentPath = NormalizePath(documentPath),
+                Message = BuildTaskText(issue),
+                Severity = issue.Severity ?? string.Empty,
+                BeginLine = beginLine,
+                EndLine = endLine,
+                BeginColumn = beginColumn,
+                EndColumn = endColumn
+            };
+        }
+
+        private static string NormalizePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return null;
+            }
+
+            try
+            {
+                string normalizedPath = path.Replace('/', Path.DirectorySeparatorChar);
+                return Path.GetFullPath(normalizedPath)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            }
+            catch
+            {
+                return path;
+            }
+        }
+
+        private static string NormalizeRelativePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return null;
+            }
+
+            return path.Replace('\\', '/').TrimStart('.', '/');
+        }
+
+        private static bool IsIssueForCurrentFile(string issueFilePath, string resolvedIssuePath, string currentFilePath)
+        {
+            string normalizedCurrent = NormalizePath(currentFilePath);
+            if (string.IsNullOrEmpty(normalizedCurrent))
+            {
+                return false;
+            }
+
+            string normalizedResolved = NormalizePath(resolvedIssuePath);
+            if (!string.IsNullOrEmpty(normalizedResolved) &&
+                string.Equals(normalizedCurrent, normalizedResolved, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            string normalizedIssue = NormalizePath(issueFilePath);
+            if (!string.IsNullOrEmpty(normalizedIssue) &&
+                !string.IsNullOrEmpty(issueFilePath) &&
+                Path.IsPathRooted(issueFilePath) &&
+                string.Equals(normalizedCurrent, normalizedIssue, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            string relativeIssuePath = NormalizeRelativePath(issueFilePath);
+            if (string.IsNullOrEmpty(relativeIssuePath))
+            {
+                return false;
+            }
+
+            string normalizedCurrentUnix = normalizedCurrent.Replace('\\', '/');
+            if (normalizedCurrentUnix.EndsWith("/" + relativeIssuePath, StringComparison.OrdinalIgnoreCase) ||
+                normalizedCurrentUnix.Equals(relativeIssuePath, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            string currentFileName = Path.GetFileName(normalizedCurrent);
+            string issueFileName = Path.GetFileName(relativeIssuePath);
+            return string.Equals(currentFileName, issueFileName, StringComparison.OrdinalIgnoreCase);
         }
 
         private static string GetRootDirectorySafe()
