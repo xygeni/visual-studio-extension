@@ -18,19 +18,16 @@ using vs2026_plugin.Services;
 
 namespace vs2026_plugin.Editor
 {
-    internal static class XygeniIssueLineDecoratorDefinitions
-    {
-        [Export(typeof(AdornmentLayerDefinition))]
-        [Name(XygeniIssueLineDecorator.LayerName)]
-        [Order(After = PredefinedAdornmentLayers.TextMarker, Before = PredefinedAdornmentLayers.Caret)]
-        internal static AdornmentLayerDefinition XygeniIssueLineDecoratorLayer;
-    }
-
     [Export(typeof(IWpfTextViewCreationListener))]
     [ContentType("text")]
     [TextViewRole(PredefinedTextViewRoles.Document)]
     internal sealed class XygeniIssueLineDecoratorFactory : IWpfTextViewCreationListener
     {
+        [Export(typeof(AdornmentLayerDefinition))]
+        [Name(XygeniIssueLineDecorator.LayerName)]
+        [Order(After = PredefinedAdornmentLayers.TextMarker, Before = PredefinedAdornmentLayers.Caret)]
+        internal AdornmentLayerDefinition XygeniIssueLineDecoratorLayer = null;
+
         [Import]
         internal ITextDocumentFactoryService TextDocumentFactoryService = null;
 
@@ -163,7 +160,7 @@ namespace vs2026_plugin.Editor
 
             foreach (var issue in allIssues)
             {
-                if (issue == null || string.IsNullOrEmpty(issue.File) || issue.BeginLine <= 0)
+                if (issue == null || string.IsNullOrEmpty(issue.File))
                 {
                     continue;
                 }
@@ -173,10 +170,12 @@ namespace vs2026_plugin.Editor
                     continue;
                 }
 
-                if (!_issuesByLine.TryGetValue(issue.BeginLine, out var lineIssues))
+                int lineNumber = issue.BeginLine > 0 ? issue.BeginLine : 1;
+
+                if (!_issuesByLine.TryGetValue(lineNumber, out var lineIssues))
                 {
                     lineIssues = new List<IXygeniIssue>();
-                    _issuesByLine[issue.BeginLine] = lineIssues;
+                    _issuesByLine[lineNumber] = lineIssues;
                 }
 
                 lineIssues.Add(issue);
@@ -190,6 +189,11 @@ namespace vs2026_plugin.Editor
 
         private void RedrawAdornments()
         {
+            if (_adornmentLayer == null)
+            {
+                return;
+            }
+
             _adornmentLayer.RemoveAllAdornments();
 
             if (_issuesByLine.Count == 0 || _view.TextViewLines == null)
@@ -207,7 +211,7 @@ namespace vs2026_plugin.Editor
                     continue;
                 }
 
-                var span = new SnapshotSpan(snapshotLine.End, snapshotLine.End);
+                var span = snapshotLine.Extent;
                 var adornment = CreateLineAdornment(issuesForLine);
                 _adornmentLayer.AddAdornment(AdornmentPositioningBehavior.TextRelative, span, snapshotLine, adornment, null);
             }
@@ -355,8 +359,15 @@ namespace vs2026_plugin.Editor
             }
 
             string normalizedCurrentUnix = normalizedCurrent.Replace('\\', '/');
-            return normalizedCurrentUnix.EndsWith("/" + relativeIssuePath, StringComparison.OrdinalIgnoreCase) ||
-                   normalizedCurrentUnix.Equals(relativeIssuePath, StringComparison.OrdinalIgnoreCase);
+            if (normalizedCurrentUnix.EndsWith("/" + relativeIssuePath, StringComparison.OrdinalIgnoreCase) ||
+                normalizedCurrentUnix.Equals(relativeIssuePath, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            string currentFileName = Path.GetFileName(normalizedCurrent);
+            string issueFileName = Path.GetFileName(relativeIssuePath);
+            return string.Equals(currentFileName, issueFileName, StringComparison.OrdinalIgnoreCase);
         }
 
         private static string GetRootDirectorySafe()
