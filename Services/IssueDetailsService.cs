@@ -341,6 +341,7 @@ namespace vs2026_plugin.Services
 
         public string GetEmptyStateHtml()
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
             string themeColors = GetThemeColors();
             string css = $@"
                 :root {{
@@ -381,6 +382,8 @@ namespace vs2026_plugin.Services
         {
             try 
             {
+               ThreadHelper.ThrowIfNotOnUIThread();
+
                // Get current VS theme colors
                string themeColors = GetThemeColors();
                
@@ -448,9 +451,34 @@ namespace vs2026_plugin.Services
                         opacity: 0.6; 
                         cursor: not-allowed; 
                     }}
+                    .xy-container-chip {{
+                        display: flex;
+                        align-items: start;
+                        gap: 2px;
+                        flex-direction: row;
+                        flex-wrap: wrap;
+                    }}
+
+                    .xy-blue-chip {{
+                        font-size: 10px !important;
+                        font-weight: 500;
+                        position: relative;
+                        border-radius: 7px !important;
+                        box-sizing: border-box;
+                        background-color: transparent !important;
+                        color: #536DF7;
+                        border: 1px solid #536DF7;
+                        min-height: 22px !important;
+                        padding-left: 2px;
+                        padding-right: 2px; 
+                        padding-top: 5px; 
+                        margin-right: 2px;
+                        text-wrap: nowrap;
+                    }}
                ";
                
                string severityClass = $"severity-{issue.Severity?.ToLower() ?? "info"}";
+               string explanation = issue.Explanation.Length > 30 ? issue.Explanation.Substring(0, 30) + "..." : issue.Explanation;
                
                // Construct HTML
                return $@"
@@ -488,7 +516,7 @@ namespace vs2026_plugin.Services
                         </div>
                         <div class='title-row'>
                             <div class='severity-icon {severityClass}'>{issue.Severity}</div> 
-                            <div>{issue.Explanation.Substring(0, 30) + "..."}</div> 
+                            <div>{explanation}</div> 
                         </div>
                         <div class='subtitle'>
                            {issue.GetSubtitleLineHtml()}
@@ -544,7 +572,7 @@ namespace vs2026_plugin.Services
                 </head>
                 <body>
                     <div class='header'>
-                        <h1>No details available</h1>
+                        <h1>No details available {ex.Message}</h1>
                     </div>
                 </body>
                 </html>";

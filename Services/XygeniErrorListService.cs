@@ -17,6 +17,7 @@ namespace vs2026_plugin.Services
         private readonly XygeniIssueService _issueService;
         private readonly object _issueLocationGate = new object();
         private List<XygeniIssueLocation> _issueLocations = new List<XygeniIssueLocation>();
+        private readonly Dictionary<ErrorTask, IXygeniIssue> _taskIssueMap = new Dictionary<ErrorTask, IXygeniIssue>();
 
         public event EventHandler IssueLocationsChanged;
 
@@ -84,6 +85,7 @@ namespace vs2026_plugin.Services
             try
             {
                 _errorListProvider.Tasks.Clear();
+                _taskIssueMap.Clear();
 
                 foreach (var issue in issues)
                 {
@@ -102,6 +104,7 @@ namespace vs2026_plugin.Services
                         Column = Math.Max(0, issue.BeginColumn - 1)
                     };
 
+                    _taskIssueMap[task] = issue;
                     task.Navigate += OnNavigate;
                     _errorListProvider.Tasks.Add(task);
 
@@ -148,12 +151,23 @@ namespace vs2026_plugin.Services
                         selection.GotoLine(errorTask.Line + 1, true);
                     }
                 }
+
+                // Open issue details panel for the navigated issue
+                _taskIssueMap.TryGetValue(errorTask, out var issue);
+                if (issue != null)
+                {
+                    ThreadHelper.JoinableTaskFactory.RunAsync(async delegate
+                    {
+                        await IssueDetailsService.GetInstance().ShowIssueDetailsAsync(issue);
+                    });
+                }
             }
             catch (Exception ex)
             {
                 _logger?.Error(ex, "Error navigating from Xygeni Error List");
             }
         }
+
 
         private static TaskErrorCategory GetTaskErrorCategory(string severity)
         {

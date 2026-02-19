@@ -26,11 +26,15 @@ namespace vs2026_plugin.Models
             return $@"
             <div id=""tab-content-1"">
                 <table>
-                    <tr><th>Type</th><td>{Type} {RemediableLevel}</td></tr>
-                    <tr><th>Package</th><td>{Name} ({Version})</td></tr>
-                    <tr><th>Severity</th><td>{Severity} (Score: {BaseScore})</td></tr>
-                    <tr><th>Published</th><td>{PublicationDate}</td></tr>
-                    <tr><th>File</th><td>{File}</td></tr>
+                
+                    {Field("Published", PublicationDate)}
+                    {Field("Affecting", !string.IsNullOrEmpty(Group) ? Group + ":" + Name + ":" + Version : (Name + ":" + Version) )}
+                    {Field("Versions", Versions)}
+                    {Field("File", File)}
+                    {Field("Direct Dependency", DirectDependency.ToString())}
+                    {Field("Vector", Vector)}
+
+                    {GetTags()}  
                 </table>
             </div>";
         }

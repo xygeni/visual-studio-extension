@@ -188,7 +188,7 @@ namespace vs2026_plugin.UI.Control
         {
             if (string.IsNullOrEmpty(iconFileName)) return null;
 
-            string baseDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            string baseDir = Path.GetDirectoryName(this.GetType().Assembly.Location);
             string iconPath = Path.Combine(baseDir, "media", "icons", iconFileName);
             return iconPath;
         }    
