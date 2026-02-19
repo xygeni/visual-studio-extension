@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
-using System.Threading.Tasks;
-using EnvDTE;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
 using Microsoft.VisualStudio.Shell;
 using vs2026_plugin.Models;
 
@@ -12,23 +13,41 @@ namespace vs2026_plugin.Services
     {
         private static XygeniErrorListService _instance;
 
-        private readonly AsyncPackage _package;
         private readonly ILogger _logger;
-        private readonly ErrorListProvider _errorListProvider;
         private readonly XygeniIssueService _issueService;
+        private readonly object _diagnosticsGate = new object();
+        private Dictionary<string, ImmutableArray<Diagnostic>> _diagnosticsByFile =
+            new Dictionary<string, ImmutableArray<Diagnostic>>(StringComparer.OrdinalIgnoreCase);
+
+        private static readonly DiagnosticDescriptor ErrorDescriptor = new DiagnosticDescriptor(
+            id: "XYGENI0001",
+            title: "Xygeni security issue",
+            messageFormat: "{0}",
+            category: "Security",
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor WarningDescriptor = new DiagnosticDescriptor(
+            id: "XYGENI0002",
+            title: "Xygeni security issue",
+            messageFormat: "{0}",
+            category: "Security",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor InfoDescriptor = new DiagnosticDescriptor(
+            id: "XYGENI0003",
+            title: "Xygeni security issue",
+            messageFormat: "{0}",
+            category: "Security",
+            defaultSeverity: DiagnosticSeverity.Info,
+            isEnabledByDefault: true);
 
         private XygeniErrorListService(AsyncPackage package, ILogger logger)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            _package = package;
             _logger = logger;
-
-            _errorListProvider = new ErrorListProvider(_package)
-            {
-                ProviderName = "Xygeni Issues"
-            };
-
             _issueService = XygeniIssueService.GetInstance();
             _issueService.IssuesChanged += OnIssuesChanged;
         }
@@ -68,95 +87,158 @@ namespace vs2026_plugin.Services
 
             var issues = _issueService.GetIssues() ?? new List<IXygeniIssue>();
             string rootDirectory = GetRootDirectorySafe();
+            var diagnosticsByFile = new Dictionary<string, List<Diagnostic>>(StringComparer.OrdinalIgnoreCase);
 
-            _errorListProvider.SuspendRefresh();
-
-            try
+            foreach (var issue in issues)
             {
-                _errorListProvider.Tasks.Clear();
-
-                foreach (var issue in issues)
+                if (issue == null)
                 {
-                    if (issue == null)
+                    continue;
+                }
+
+                try
+                {
+                    string resolvedPath = ResolveIssuePath(issue.File, rootDirectory);
+                    string normalizedPath = NormalizePath(resolvedPath);
+                    if (string.IsNullOrEmpty(normalizedPath))
                     {
                         continue;
                     }
 
-                    var task = new ErrorTask
+                    Diagnostic diagnostic = CreateDiagnostic(issue, normalizedPath);
+                    if (diagnostic == null)
                     {
-                        Category = TaskCategory.BuildCompile,
-                        ErrorCategory = GetTaskErrorCategory(issue.Severity),
-                        Text = BuildTaskText(issue),
-                        Document = ResolveIssuePath(issue.File, rootDirectory),
-                        Line = Math.Max(0, issue.BeginLine - 1),
-                        Column = Math.Max(0, issue.BeginColumn - 1)
-                    };
-
-                    task.Navigate += OnNavigate;
-                    _errorListProvider.Tasks.Add(task);
-                }
-            }
-            finally
-            {
-                _errorListProvider.ResumeRefresh();
-            }
-        }
-
-        private void OnNavigate(object sender, EventArgs e)
-        {
-            ThreadHelper.ThrowIfNotOnUIThread();
-
-            try
-            {
-                var errorTask = sender as ErrorTask;
-                if (errorTask == null || string.IsNullOrEmpty(errorTask.Document))
-                {
-                    return;
-                }
-
-                var dte = ServiceProvider.GlobalProvider.GetService(typeof(DTE)) as DTE;
-                if (dte == null)
-                {
-                    return;
-                }
-
-                if (!File.Exists(errorTask.Document))
-                {
-                    return;
-                }
-
-                var window = dte.ItemOperations.OpenFile(errorTask.Document);
-                if (window != null)
-                {
-                    var selection = dte.ActiveDocument?.Selection as TextSelection;
-                    if (selection != null)
-                    {
-                        selection.GotoLine(errorTask.Line + 1, true);
+                        continue;
                     }
+
+                    if (!diagnosticsByFile.TryGetValue(normalizedPath, out List<Diagnostic> fileDiagnostics))
+                    {
+                        fileDiagnostics = new List<Diagnostic>();
+                        diagnosticsByFile[normalizedPath] = fileDiagnostics;
+                    }
+
+                    fileDiagnostics.Add(diagnostic);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.Error(ex, "Error building Xygeni diagnostic entry");
                 }
             }
-            catch (Exception ex)
+
+            var immutableDiagnostics = new Dictionary<string, ImmutableArray<Diagnostic>>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, List<Diagnostic>> pair in diagnosticsByFile)
             {
-                _logger?.Error(ex, "Error navigating from Xygeni Error List");
+                immutableDiagnostics[pair.Key] = pair.Value.ToImmutableArray();
+            }
+
+            lock (_diagnosticsGate)
+            {
+                _diagnosticsByFile = immutableDiagnostics;
             }
         }
 
-        private static TaskErrorCategory GetTaskErrorCategory(string severity)
+        internal static ImmutableArray<DiagnosticDescriptor> SupportedDiagnosticDescriptors
+        {
+            get
+            {
+                return ImmutableArray.Create(ErrorDescriptor, WarningDescriptor, InfoDescriptor);
+            }
+        }
+
+        internal static ImmutableArray<Diagnostic> GetDiagnosticsForFile(string filePath)
+        {
+            var instance = _instance;
+            if (instance == null)
+            {
+                return ImmutableArray<Diagnostic>.Empty;
+            }
+
+            return instance.GetDiagnosticsForFileInternal(filePath);
+        }
+
+        private ImmutableArray<Diagnostic> GetDiagnosticsForFileInternal(string filePath)
+        {
+            string normalizedPath = NormalizePath(filePath);
+            if (string.IsNullOrEmpty(normalizedPath))
+            {
+                return ImmutableArray<Diagnostic>.Empty;
+            }
+
+            lock (_diagnosticsGate)
+            {
+                if (_diagnosticsByFile.TryGetValue(normalizedPath, out ImmutableArray<Diagnostic> diagnostics))
+                {
+                    return diagnostics;
+                }
+            }
+
+            return ImmutableArray<Diagnostic>.Empty;
+        }
+
+        private static Diagnostic CreateDiagnostic(IXygeniIssue issue, string filePath)
+        {
+            DiagnosticSeverity severity = GetDiagnosticSeverity(issue.Severity);
+            DiagnosticDescriptor descriptor = GetDescriptor(severity);
+            Location location = CreateLocation(issue, filePath);
+            string message = BuildDiagnosticMessage(issue);
+
+            var properties = ImmutableDictionary<string, string>.Empty
+                .Add("xygeniIssueId", issue.Id ?? string.Empty)
+                .Add("xygeniCategory", issue.Category ?? string.Empty);
+
+            return Diagnostic.Create(descriptor, location, properties, message);
+        }
+
+        private static Location CreateLocation(IXygeniIssue issue, string filePath)
+        {
+            int startLine = Math.Max(0, issue.BeginLine - 1);
+            int startColumn = Math.Max(0, issue.BeginColumn - 1);
+
+            int endLine = issue.EndLine > 0 ? issue.EndLine - 1 : startLine;
+            int endColumn = issue.EndColumn > 0 ? issue.EndColumn - 1 : startColumn + 1;
+
+            if (endLine < startLine || (endLine == startLine && endColumn <= startColumn))
+            {
+                endLine = startLine;
+                endColumn = startColumn + 1;
+            }
+
+            var lineSpan = new LinePositionSpan(
+                new LinePosition(startLine, startColumn),
+                new LinePosition(endLine, endColumn));
+
+            return Location.Create(filePath, new TextSpan(0, 1), lineSpan);
+        }
+
+        private static DiagnosticDescriptor GetDescriptor(DiagnosticSeverity severity)
+        {
+            switch (severity)
+            {
+                case DiagnosticSeverity.Error:
+                    return ErrorDescriptor;
+                case DiagnosticSeverity.Warning:
+                    return WarningDescriptor;
+                default:
+                    return InfoDescriptor;
+            }
+        }
+
+        private static DiagnosticSeverity GetDiagnosticSeverity(string severity)
         {
             switch ((severity ?? string.Empty).Trim().ToLowerInvariant())
             {
                 case "critical":
                 case "high":
-                    return TaskErrorCategory.Error;
+                    return DiagnosticSeverity.Error;
                 case "medium":
                 case "low":
-                    return TaskErrorCategory.Warning;
+                    return DiagnosticSeverity.Warning;
                 default:
-                    return TaskErrorCategory.Message;
+                    return DiagnosticSeverity.Info;
             }
         }
 
-        private static string BuildTaskText(IXygeniIssue issue)
+        private static string BuildDiagnosticMessage(IXygeniIssue issue)
         {
             string severity = string.IsNullOrWhiteSpace(issue.Severity) ? "info" : issue.Severity;
             string type = string.IsNullOrWhiteSpace(issue.Type) ? "Issue" : issue.Type;
@@ -168,19 +250,19 @@ namespace vs2026_plugin.Services
         {
             if (string.IsNullOrWhiteSpace(issueFilePath))
             {
-                return string.Empty;
+                return null;
             }
 
             try
             {
                 if (Path.IsPathRooted(issueFilePath))
                 {
-                    return Path.GetFullPath(issueFilePath);
+                    return NormalizePath(Path.GetFullPath(issueFilePath));
                 }
 
                 if (!string.IsNullOrWhiteSpace(rootDirectory))
                 {
-                    return Path.GetFullPath(Path.Combine(rootDirectory, issueFilePath));
+                    return NormalizePath(Path.GetFullPath(Path.Combine(rootDirectory, issueFilePath)));
                 }
             }
             catch
@@ -188,7 +270,7 @@ namespace vs2026_plugin.Services
                 // Keep the original issue path if resolution fails.
             }
 
-            return issueFilePath;
+            return NormalizePath(issueFilePath);
         }
 
         private static string GetRootDirectorySafe()
@@ -203,6 +285,25 @@ namespace vs2026_plugin.Services
             catch
             {
                 return string.Empty;
+            }
+        }
+
+        private static string NormalizePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return null;
+            }
+
+            try
+            {
+                string normalizedPath = path.Replace('/', Path.DirectorySeparatorChar);
+                return Path.GetFullPath(normalizedPath)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            }
+            catch
+            {
+                return path;
             }
         }
     }
