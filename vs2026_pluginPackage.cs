@@ -47,6 +47,7 @@ namespace vs2026_plugin
         public static vs2026_pluginPackage Instance { get; private set; }
 
         private IVsOutputWindowPane _outputPane;
+        private XygeniErrorListService _errorListService;
         public ILogger Logger { get; private set; }
 
         /// <summary>
@@ -79,6 +80,8 @@ namespace vs2026_plugin
             XygeniScannerService.GetInstance(Logger);
             XygeniIssueService.GetInstance(Logger);
             IssueDetailsService.GetInstance(this, Logger);
+            _errorListService = XygeniErrorListService.GetInstance(this, Logger);
+            _errorListService.Refresh();
 
             await Commands.XygeniSettingsCommand.InitializeAsync(this);
             await Commands.XygeniExplorerCommand.InitializeAsync(this);            
