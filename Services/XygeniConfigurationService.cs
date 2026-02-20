@@ -17,6 +17,7 @@ namespace vs2026_plugin.Services
     {
         private const string CollectionPath = "XygeniConfiguration";
         private const string ApiUrlKey = "ApiUrl";
+        private const string DefaultApiUrl = "https://api.xygeni.io";
         private const string TokenKey = "ApiToken";
         private const string ProxyProtocolKey = "ProxyProtocol";
         private const string ProxyHostKey = "ProxyHost";
@@ -74,7 +75,13 @@ namespace vs2026_plugin.Services
         public string GetUrl()
         {
             var store = _settingsManager.GetReadOnlySettingsStore(SettingsScope.UserSettings);
-            return store.CollectionExists(CollectionPath) ? store.GetString(CollectionPath, ApiUrlKey, string.Empty) : string.Empty;
+            if (!store.CollectionExists(CollectionPath))
+            {
+                return DefaultApiUrl;
+            }
+
+            var configuredUrl = store.GetString(CollectionPath, ApiUrlKey, DefaultApiUrl);
+            return string.IsNullOrWhiteSpace(configuredUrl) ? DefaultApiUrl : configuredUrl.Trim();
         }
 
         public string GetToken()
