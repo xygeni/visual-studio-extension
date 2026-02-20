@@ -1,0 +1,137 @@
+name: Build And Publish Xygeni Visual Studio Extension
+
+on:
+  workflow_dispatch:
+
+env:
+  ASSEMBLY_NAME: xygeni-extension.vsix
+
+jobs:
+  build:
+    name: Build VSIX (Windows)
+    runs-on: windows-2025
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get release version
+        id: extract_version
+        shell: powershell
+        run: |
+          $branchName = "${{ github.ref_name }}"
+          if ($branchName -match '^release\/(\d+\.\d+\.\d+)$') {
+            $version = $matches[1]
+            Write-Host "Building Version: $version"
+            echo "EXT_VERSION=$version" >> $env:GITHUB_ENV
+            echo "version=$version" >> $env:GITHUB_OUTPUT
+          }
+          else {
+            Write-Error "Branch name does not match expected format 'release/a.b.c'"
+            exit 1
+          }
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.config') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v1
+        with:
+          vs-version: '[17.0, )'
+
+      - name: Restore NuGet packages
+        run: nuget restore ${{ inputs.solution-file-path }}
+
+      - name: Build
+        shell: powershell
+        run: |
+          msbuild ${{ inputs.solution-file-path }} /p:configuration=Release /p:DeployExtension=false /p:ZipPackageCompressionLevel=normal /v:m
+
+      - name: Locate VSIX artifact
+        id: find_vsix
+        shell: pwsh
+        run: |
+          $vsix = Get-ChildItem -Path $PWD -Recurse -Filter *.vsix |
+            Where-Object { $_.FullName -match "\\bin\\Release\\$env:ASSEMBLY_NAME" } |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+          if (-not $vsix) {
+            Write-Error "No .vsix found under bin\Release\$env:ASSEMBLY_NAME. Check your build output paths."
+            exit 1
+          }
+
+          "vsix_path=$($vsix.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Found VSIX: $($vsix.FullName)"
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xygeni-extension.vsix
+          path: ${{ steps.find_vsix.outputs.vsix_path }}
+          if-no-files-found: error
+
+  approval:
+    name: Manual approval (Linux)
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - uses: trstringer/manual-approval@v1
+        timeout-minutes: 5
+        with:
+          secret: ${{ github.TOKEN }}
+          approvers: fcarnicero,nanoalbelda,vdlr
+          minimum-approvals: 1
+
+  publish:
+    name: Publish VSIX (Windows)
+    runs-on: windows-2025
+    needs: approval
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+
+    steps:
+      - name: Download VSIX artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: xygeni-extension.vsix
+          path: ${{ github.workspace }}\artifact
+
+      - name: Resolve downloaded VSIX path
+        id: vsix
+        shell: pwsh
+        run: |
+          $vsix = Get-ChildItem -Path "${{ github.workspace }}\artifact" -Recurse -Filter *.vsix |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+          if (-not $vsix) {
+            Write-Error "Downloaded artifact did not contain a .vsix file."
+            exit 1
+          }
+
+          "path=$($vsix.FullName)"
+          
+      - name: Publish to Visual Studio Marketplace
+        shell: pwsh
+        env:
+          VS_MARKETPLACE_PAT: ${{ secrets.VS_MARKETPLACE_PAT }}
+        run: |
+          if (-not $env:VS_MARKETPLACE_PAT) {
+            Write-Error "Missing secret VS_MARKETPLACE_PAT."
+          }
+
+          tfx extension publish `
+            --vsix "${{ steps.find_vsix.outputs.vsix_path }}" `
+            --token "$env:VS_MARKETPLACE_PAT"    
