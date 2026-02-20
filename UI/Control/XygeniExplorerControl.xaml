@@ -9,25 +9,6 @@
              d:DesignHeight="450" d:DesignWidth="300"
              Background="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowBackgroundBrushKey}}">
     <UserControl.Resources>
-        <DataTemplate x:Key="TreeNodeTemplate">
-            <StackPanel Orientation="Horizontal">
-                <Image Width="16" Height="16" Margin="0,0,5,0" VerticalAlignment="Center">
-                    <Image.Style>
-                        <Style TargetType="Image">
-                            <Setter Property="Source" Value="{Binding IconPath}"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IconPath}" Value="{x:Null}">
-                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Image.Style>
-                </Image>
-                <TextBlock Text="{Binding DisplayText}" VerticalAlignment="Center" 
-                           Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
-            </StackPanel>
-        </DataTemplate>
-        
         <Style TargetType="TreeView">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -35,34 +16,7 @@
         </Style>
         <Style TargetType="TreeViewItem">
             <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
-            <Setter Property="HeaderTemplate">
-                <Setter.Value>
-                    <DataTemplate>
-                        <ContentPresenter Content="{Binding}">
-                            <ContentPresenter.Resources>
-                                <DataTemplate DataType="{x:Type local:TreeNodeData}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="16" Height="16" Margin="0,2,5,0" VerticalAlignment="Center">
-                                            <Image.Style>
-                                                <Style TargetType="Image">
-                                                    <Setter Property="Source" Value="{Binding IconPath}"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IconPath}" Value="{x:Null}">
-                                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Image.Style>
-                                        </Image>
-                                        <TextBlock Text="{Binding DisplayText}" VerticalAlignment="Center" 
-                                                   Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ContentPresenter.Resources>
-                        </ContentPresenter>
-                    </DataTemplate>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded}"/>
         </Style>
     </UserControl.Resources>
     <Grid>
@@ -74,13 +28,14 @@
         <ToolBar Band="0" Background="Transparent" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowBorderBrushKey}}">
            
             <Button x:Name="RunScanBtn" Click="RunScanBtn_Click" ToolTip="Run Scan">
-                <Image Source="media\icons\play.png" Width="16" Height="16"/>
+                <Image x:Name="RunScanIcon" Width="16" Height="16"/>
             </Button>
         </ToolBar>
 
         <TreeView x:Name="ExplorerTree"
           Grid.Row="1"
           ItemsSource="{Binding RootItems}"
+          PreviewMouseLeftButtonDown="ExplorerTree_PreviewMouseLeftButtonDown"
           SelectedItemChanged="ExplorerTree_SelectedItemChanged">
 
             <TreeView.Resources>
@@ -89,11 +44,21 @@
                 <HierarchicalDataTemplate DataType="{x:Type local:TreeNodeData}"
                                         ItemsSource="{Binding Items}">
                     <StackPanel Orientation="Horizontal">
-                        <Image Width="16"
-                            Height="16"
-                            Margin="0,0,4,0"
-                            Source="{Binding IconPath}" />
-                        <TextBlock Text="{Binding DisplayText}" />
+                        <Image Width="16" Height="16" Margin="0,0,5,0" VerticalAlignment="Center">
+                            <Image.Style>
+                                <Style TargetType="Image">
+                                    <Setter Property="Source" Value="{Binding IconPath}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IconPath}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Image.Style>
+                        </Image>
+                        <TextBlock Text="{Binding DisplayText}"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
                     </StackPanel>
                 </HierarchicalDataTemplate>
 

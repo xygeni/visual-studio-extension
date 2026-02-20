@@ -12,11 +12,12 @@ namespace vs2026_plugin.Models
             return $@"
             <div id=""tab-content-1"">
                 <table>
-                    <tr><th>Type</th><td>{Type}</td></tr>
-                    <tr><th>Detector</th><td>{Detector}</td></tr>
-                    <tr><th>Tool Kind</th><td>{ToolKind}</td></tr>
-                    <tr><th>File</th><td>{File}</td></tr>
-                    <tr><th>Line</th><td>{BeginLine + 1}</td></tr>
+                    {Field("Explanation", Explanation)}
+                    {Where(CurrentBranch, null, null)}
+                    {Field("Location", File)}
+                    {Field("Found By", Detector)}
+                    {Field("Tool", ToolKind)}
+                    {GetTags()}
                 </table>
             </div>";
         }

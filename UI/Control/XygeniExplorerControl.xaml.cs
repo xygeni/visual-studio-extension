@@ -1,17 +1,16 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.IO;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using Microsoft.VisualStudio.Shell;
 using vs2026_plugin.Services;
 using vs2026_plugin.Models;
 using vs2026_plugin.Commands;
 using System.Reflection;
+using System.Windows.Media.Imaging;
 
 
 namespace vs2026_plugin.UI.Control
@@ -22,6 +21,7 @@ namespace vs2026_plugin.UI.Control
         public string IconPath { get; set; }
         public string DisplayText { get; set; }
         public object Tag { get; set; }
+        public bool IsExpanded { get; set; }
 
         public ObservableCollection<TreeNodeData> Items { get; } 
             = new ObservableCollection<TreeNodeData>();
@@ -39,24 +39,37 @@ namespace vs2026_plugin.UI.Control
     {
         private readonly XygeniIssueService _issueService;
         private readonly XygeniScannerService _scannerService;
-        private readonly XygeniInstallerService _installerService;
 
         private readonly XygeniExplorerViewModel _vm;
 
         public XygeniExplorerControl()
         {
             InitializeComponent();
+            SetRunButtonIcon();
 
-            var issueService = XygeniIssueService.GetInstance();
-            var scannerService = XygeniScannerService.GetInstance();
+            _issueService = XygeniIssueService.GetInstance();
+            _scannerService = XygeniScannerService.GetInstance();
 
-            _vm = new XygeniExplorerViewModel(issueService, scannerService);
+            _vm = new XygeniExplorerViewModel(_issueService, _scannerService);
 
             DataContext = _vm;
 
             _vm.IssueSelected += OnIssueSelected;
-            issueService.IssuesChanged += OnIssuesChanged;
-            
+            _issueService.IssuesChanged += OnIssuesChanged;
+            _scannerService.Changed += OnScannerChanged;
+
+            _vm.Refresh();
+        }
+
+        private void SetRunButtonIcon()
+        {
+            string baseDir = Path.GetDirectoryName(this.GetType().Assembly.Location);
+            string iconPath = Path.Combine(baseDir, "media", "icons", "play.png");
+
+            if (File.Exists(iconPath))
+            {
+                RunScanIcon.Source = new BitmapImage(new Uri(iconPath, UriKind.Absolute));
+            }
         }
 
         private async void OnIssuesChanged(object sender, EventArgs e)
@@ -65,7 +78,11 @@ namespace vs2026_plugin.UI.Control
             _vm.Refresh();
         }
 
-       
+        private async void OnScannerChanged(object sender, EventArgs e)
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            _vm.Refresh();
+        }
 
               
 
@@ -79,7 +96,7 @@ namespace vs2026_plugin.UI.Control
         {
             if (_vm != null)
             {
-                if (e.NewValue is TreeViewItem item && item.Header is TreeNodeData nodeData)
+                if (e.NewValue is TreeNodeData nodeData)
                 {
                     _vm.SelectedItem = nodeData;
                 }
@@ -88,6 +105,36 @@ namespace vs2026_plugin.UI.Control
                     _vm.SelectedItem = null;
                 }
             }
+        }
+
+        private void ExplorerTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (_vm == null) return;
+
+            var clickedContainer = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
+            if (clickedContainer?.DataContext is TreeNodeData nodeData &&
+                nodeData.Tag is IXygeniIssue)
+            {
+                // Force issue-row selection to avoid the category container keeping selection.
+                clickedContainer.IsSelected = true;
+                clickedContainer.Focus();
+                e.Handled = true;
+            }
+        }
+
+        private static T FindVisualParent<T>(DependencyObject child) where T : DependencyObject
+        {
+            while (child != null)
+            {
+                if (child is T typedParent)
+                {
+                    return typedParent;
+                }
+
+                child = VisualTreeHelper.GetParent(child);
+            }
+
+            return null;
         }
 
         

@@ -19,18 +19,36 @@ namespace vs2026_plugin.Services
     {
         private static XygeniIssueService _instance;
         private readonly ILogger _logger;
+        private readonly XygeniScannerService _scannerService;
         private List<IXygeniIssue> _issues = new List<IXygeniIssue>();
         private bool _isReadingIssues = false;
+        private bool _pendingReadIssues = false;
 
         public event EventHandler IssuesChanged;
 
         private XygeniIssueService(ILogger logger)
         {
             _logger = logger;
-            XygeniScannerService.GetInstance().Changed += (s, e) =>
+            _scannerService = XygeniScannerService.GetInstance();
+            _scannerService.Changed += (s, e) =>
             {
-                ReadIssuesAsync();
+                OnScannerChanged();
             };
+        }
+
+        private void OnScannerChanged()
+        {
+            var latestScan = _scannerService.GetScans()
+                .OrderByDescending(s => s.Timestamp)
+                .FirstOrDefault();
+
+            // Refresh issues only when a scan has ended. A "running" update is emitted at scan start.
+            if (latestScan != null && string.Equals(latestScan.Status, "running", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            _ = ReadIssuesAsync();
         }
 
        
@@ -78,7 +96,8 @@ namespace vs2026_plugin.Services
                 string suffix = XygeniCommands.ReportSuffix;
                 if (_isReadingIssues)
                 {
-                    _logger.Log("  Issues are already being read, skipping...");
+                    _pendingReadIssues = true;
+                    _logger.Log("  Issues are already being read, scheduling a refresh...");
                     return;
                 }
                 _logger.Log("  Issues report directory: " + workingDir);
@@ -100,6 +119,12 @@ namespace vs2026_plugin.Services
             {
                 _isReadingIssues = false;
                 _logger.Log("==================================================");
+
+                if (_pendingReadIssues)
+                {
+                    _pendingReadIssues = false;
+                    _ = ReadIssuesAsync();
+                }
             }
         }
 

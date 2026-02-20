@@ -6,7 +6,7 @@ using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using vs2026_plugin.Services;
 using System.IO;
-using Task = System.Threading.Tasks.Task;
+using System.Threading.Tasks;
 
 
 
@@ -41,10 +41,13 @@ namespace vs2026_plugin
         /// vs2026_pluginPackage GUID string.
         /// </summary>
         public const string PackageGuidString = "b441d6b9-1770-4351-826d-479748bb2ff9";
+        private static readonly Guid XygeniOutputPaneGuid = new Guid("D0E6C712-4B6A-4A73-9095-2BB6E30D42A9");
+        private static readonly Guid OutputToolWindowGuid = new Guid("34E76E81-EE4A-11D0-AE2E-00A0C90FFFC3");
 
         public static vs2026_pluginPackage Instance { get; private set; }
 
         private IVsOutputWindowPane _outputPane;
+        private XygeniErrorListService _errorListService;
         public ILogger Logger { get; private set; }
 
         /// <summary>
@@ -62,19 +65,8 @@ namespace vs2026_plugin
             await this.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
             // Initialize Output Channel
-            Guid generalPaneGuid = new Guid("D0E6C712-4B6A-4A73-9095-2BB6E30D42A9");
-                        
-            // 1. Get the Output Window service
-            IVsOutputWindow outWindow = await GetServiceAsync(typeof(SVsOutputWindow)) as IVsOutputWindow;
-
-            IVsOutputWindowPane generalPane;
-            int hr = outWindow.GetPane(ref generalPaneGuid, out generalPane);
-
-            if (ErrorHandler.Failed(hr) || generalPane == null)
-            {
-                outWindow.CreatePane(ref generalPaneGuid, "Xygeni Output", 1, 1);
-                outWindow.GetPane(ref generalPaneGuid, out generalPane);
-            }
+            IVsOutputWindowPane generalPane = await GetOrCreateOutputPaneAsync();
+            _outputPane = generalPane;
 
             // Initialize Logger
             Logger = new XygeniOutputLogger(generalPane);
@@ -88,6 +80,8 @@ namespace vs2026_plugin
             XygeniScannerService.GetInstance(Logger);
             XygeniIssueService.GetInstance(Logger);
             IssueDetailsService.GetInstance(this, Logger);
+            _errorListService = XygeniErrorListService.GetInstance(this, Logger);
+            _errorListService.Refresh();
 
             await Commands.XygeniSettingsCommand.InitializeAsync(this);
             await Commands.XygeniExplorerCommand.InitializeAsync(this);            
@@ -95,6 +89,58 @@ namespace vs2026_plugin
             
             var initEvents = new InitEvents(this, Logger);
             initEvents.registerEvents();
+        }
+
+        public async Task ShowOutputPaneAsync()
+        {
+            await JoinableTaskFactory.SwitchToMainThreadAsync(DisposalToken);
+            await ShowOutputToolWindowAsync();
+            if (_outputPane == null)
+            {
+                _outputPane = await GetOrCreateOutputPaneAsync();
+            }
+            _outputPane?.Activate();
+        }
+
+        private async Task ShowOutputToolWindowAsync()
+        {
+            await JoinableTaskFactory.SwitchToMainThreadAsync(DisposalToken);
+
+            IVsUIShell uiShell = await GetServiceAsync(typeof(SVsUIShell)) as IVsUIShell;
+            if (uiShell == null)
+            {
+                return;
+            }
+
+            Guid outputWindowGuid = OutputToolWindowGuid;
+            IVsWindowFrame outputFrame;
+            int hr = uiShell.FindToolWindow(0, ref outputWindowGuid, out outputFrame);
+            if (ErrorHandler.Succeeded(hr) && outputFrame != null)
+            {
+                ErrorHandler.ThrowOnFailure(outputFrame.Show());
+            }
+        }
+
+        private async Task<IVsOutputWindowPane> GetOrCreateOutputPaneAsync()
+        {
+            await JoinableTaskFactory.SwitchToMainThreadAsync(DisposalToken);
+
+            IVsOutputWindow outWindow = await GetServiceAsync(typeof(SVsOutputWindow)) as IVsOutputWindow;
+            if (outWindow == null)
+            {
+                return null;
+            }
+
+            Guid paneGuid = XygeniOutputPaneGuid;
+            IVsOutputWindowPane pane;
+            int hr = outWindow.GetPane(ref paneGuid, out pane);
+            if (ErrorHandler.Failed(hr) || pane == null)
+            {
+                outWindow.CreatePane(ref paneGuid, "Xygeni Output", 1, 1);
+                outWindow.GetPane(ref paneGuid, out pane);
+            }
+
+            return pane;
         }
         
         // When project/solution is loaded, install scanner and read issues

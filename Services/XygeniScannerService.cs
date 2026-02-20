@@ -9,6 +9,7 @@ using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Settings;
 using vs2026_plugin.Services;
 using vs2026_plugin.Commands;
+using vs2026_plugin.Models;
 
 namespace vs2026_plugin.Services
 {
@@ -292,7 +293,55 @@ namespace vs2026_plugin.Services
                 env["XYGENI_TOKEN"] = token;
             }
 
-            // Note: Proxy settings are not yet implemented in C# side
+            ApplyProxyEnvironmentVariables(env, _configurationService.GetProxySettings());
+        }
+
+        private void ApplyProxyEnvironmentVariables(Dictionary<string, string> env, ProxySettings proxySettings)
+        {
+            if (proxySettings == null || string.IsNullOrWhiteSpace(proxySettings.Host))
+            {
+                return;
+            }
+
+            string protocol = string.IsNullOrWhiteSpace(proxySettings.Protocol) ? "http" : proxySettings.Protocol.Trim();
+            string host = proxySettings.Host.Trim();
+            string portPart = proxySettings.Port.HasValue ? $":{proxySettings.Port.Value}" : string.Empty;
+            string credentials = string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(proxySettings.Username))
+            {
+                string username = Uri.EscapeDataString(proxySettings.Username.Trim());
+                string password = Uri.EscapeDataString(proxySettings.Password ?? string.Empty);
+                credentials = $"{username}:{password}@";
+            }
+
+            string proxyUrl = $"{protocol}://{credentials}{host}{portPart}";
+
+            env["HTTP_PROXY"] = proxyUrl;
+            env["HTTPS_PROXY"] = proxyUrl;
+
+            if (!string.IsNullOrWhiteSpace(proxySettings.NonProxyHosts))
+            {
+                env["NO_PROXY"] = proxySettings.NonProxyHosts.Trim();
+            }
+
+            SetEnvIfPresent(env, "PROXY_PROTOCOL", proxySettings.Protocol);
+            SetEnvIfPresent(env, "PROXY_HOST", proxySettings.Host);
+            SetEnvIfPresent(env, "PROXY_AUTH", proxySettings.Authentication);
+            SetEnvIfPresent(env, "PROXY_USERNAME", proxySettings.Username);
+            SetEnvIfPresent(env, "PROXY_PASSWORD", proxySettings.Password);
+            if (proxySettings.Port.HasValue)
+            {
+                env["PROXY_PORT"] = proxySettings.Port.Value.ToString();
+            }
+        }
+
+        private void SetEnvIfPresent(Dictionary<string, string> env, string key, string value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                env[key] = value.Trim();
+            }
         }
 
         private string GetScannerScriptPath(string xygeniScannerPath)

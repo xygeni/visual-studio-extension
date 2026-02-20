@@ -1,6 +1,9 @@
 using System;
+using System.Linq;
 using Markdig;
 using System.Collections.Generic;
+using Microsoft.VisualStudio.Shell;
+using System.IO;
 
 namespace vs2026_plugin.Models
 {
@@ -35,6 +38,9 @@ namespace vs2026_plugin.Models
         string GetExplanationHtml();
         string GetRemediationTab();
         string GetRemediationTabContent();
+        string GetTags();
+        string Field(string name, string value);
+
     }
 
     public abstract class AbstractXygeniIssue : IXygeniIssue
@@ -61,6 +67,37 @@ namespace vs2026_plugin.Models
 
         public const string RemediableAuto = "AUTO";
         public const string RemediableManual = "MANUAL";
+
+        // static cache icons as data URIs for WebView2
+        public static string BranchIcon;
+        public static string CommitIcon;
+        public static string UserIcon;
+        private static bool _iconsLoaded = false;
+
+        private static string ToDataUri(string filePath)
+        {
+            if (!System.IO.File.Exists(filePath)) return "";
+            byte[] bytes = System.IO.File.ReadAllBytes(filePath);
+            string base64 = Convert.ToBase64String(bytes);
+            return $"data:image/png;base64,{base64}";
+        }
+
+        public static void LoadIcons()
+        {
+            if (_iconsLoaded) return;
+            string baseDir = Path.GetDirectoryName(typeof(AbstractXygeniIssue).Assembly.Location);
+            BranchIcon = ToDataUri(Path.Combine(baseDir, "media", "icons", "branch.png"));
+            CommitIcon = ToDataUri(Path.Combine(baseDir, "media", "icons", "commit.png"));
+            UserIcon = ToDataUri(Path.Combine(baseDir, "media", "icons", "user.png"));
+            _iconsLoaded = true;
+        }
+
+        private static readonly Dictionary<string, string> texts = new Dictionary<string, string> {
+                {"manual_fix", "Manual Fix"},
+                {"potential_reachable", "Potential Reachable"},
+                {"in-app-code", "In-App Code"},
+                {"generic", "Generic"}
+            }; 
 
         protected AbstractXygeniIssue()
         {
@@ -99,13 +136,13 @@ namespace vs2026_plugin.Models
 
         public virtual string GetCodeSnippetHtml()
         {
-            if (string.IsNullOrEmpty(Code)) return "";
+            if (string.IsNullOrEmpty(Code) || string.IsNullOrEmpty(File)) return "";
 
             var codeLines = Code.Split('\n');
             string codeSnippet = "";
             for (int i = 0; i < codeLines.Length; i++)
             {
-                int lineNumber = BeginLine + i + 1;
+                int lineNumber = BeginLine + i;
                 string escapedLine = codeLines[i].Replace("<", "&lt;").Replace(">", "&gt;");
                 codeSnippet += $@"
                 <tr>
@@ -190,6 +227,32 @@ namespace vs2026_plugin.Models
                 </script>
             </div>";
         }
+
+        public virtual string GetTags() {
+            if( Tags is null ) return "";
+            return "<tr><th>Tags</th>" +
+                   "<td><div class='xy-container-chip'>" + string.Join(" ", Tags.Select(tag => $"<div class='xy-blue-chip'>{ TagNames(tag)}</div>")) + "</div></td></tr>";
+        }
+
+        public virtual string Field(string name, string value) {
+            return string.IsNullOrEmpty(value) ? "" : $"<tr><th>{name}</th><td>{value}</td></tr>";
+        }
+
+        public virtual string Where(string branch, string commit, string user) {
+            LoadIcons();
+            string where = "";
+            if(!string.IsNullOrEmpty(branch)) where += $"<img alt='Branch' src='{AbstractXygeniIssue.BranchIcon}' width='16' height='16' style='vertical-align:middle;margin-right:4px'></img> {branch}";
+            if(!string.IsNullOrEmpty(commit)) where += $"<img alt='Commit' src='{AbstractXygeniIssue.CommitIcon}' width='16' height='16' style='vertical-align:middle;margin-right:4px'></img> {commit}";
+            if(!string.IsNullOrEmpty(user)) where += $"<img alt='User' src='{AbstractXygeniIssue.UserIcon}' width='16' height='16' style='vertical-align:middle;margin-right:4px'></img> {user}";
+            if(!string.IsNullOrEmpty(where)) where =  $"<tr><th>Where</th><td>{where}</td></tr>";
+            return where;
+        }
+
+        private string TagNames(string tag) {
+            return texts.ContainsKey(tag.ToLower()) ? texts[tag.ToLower()] : tag;
+        }
     }
+
+    
 
 }
