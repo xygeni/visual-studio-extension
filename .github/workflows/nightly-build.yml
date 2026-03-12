@@ -40,6 +40,6 @@ jobs:
       uses: xygeni/xygeni-action@13c6ed2797df7d85749864e2cbcf09c893f43b23 # v6.4.0
       id: Xygeni-Scanner
       with:
-        command: scan --never-fail
+        command: scan --never-fail --incremental
         token: ${{ secrets.XYGENI_TOKEN }}
         gh_token: ${{ secrets.GH_PAT_FOR_DOGFOODING }}
