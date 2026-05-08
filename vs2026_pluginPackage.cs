@@ -5,6 +5,7 @@ using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using vs2026_plugin.Services;
+using vs2026_plugin.Editor;
 using System.IO;
 using System.Threading.Tasks;
 
@@ -48,6 +49,7 @@ namespace vs2026_plugin
 
         private IVsOutputWindowPane _outputPane;
         private XygeniErrorListService _errorListService;
+        private XygeniDocumentSaveListener _saveListener;
         public ILogger Logger { get; private set; }
 
         /// <summary>
@@ -84,11 +86,51 @@ namespace vs2026_plugin
             _errorListService.Refresh();
 
             await Commands.XygeniSettingsCommand.InitializeAsync(this);
-            await Commands.XygeniExplorerCommand.InitializeAsync(this);            
+            await Commands.XygeniExplorerCommand.InitializeAsync(this);
+            await Commands.XygeniRunIncrementalScanCommand.InitializeAsync(this);
             Logger.Log("Xygeni Extension Initialized Successfully");
-            
+
             var initEvents = new InitEvents(this, Logger);
             initEvents.registerEvents();
+
+            // Register a Running Document Table listener so that, when the user
+            // enables auto-scan, file saves trigger a debounced incremental scan.
+            try
+            {
+                if (await GetServiceAsync(typeof(SVsRunningDocumentTable)) is IVsRunningDocumentTable rdt)
+                {
+                    _saveListener = new XygeniDocumentSaveListener(rdt, Logger);
+                    _saveListener.Advise();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Failed to register Xygeni save listener");
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && _saveListener != null)
+            {
+                try
+                {
+                    // Unadvise must run on the UI thread; if Dispose was invoked
+                    // off-UI (e.g. during finalization on shutdown), skip it —
+                    // VS will reclaim the cookie when the package is torn down.
+                    if (ThreadHelper.CheckAccess())
+                    {
+                        _saveListener.Unadvise();
+                    }
+                    _saveListener.Dispose();
+                    _saveListener = null;
+                }
+                catch (Exception ex)
+                {
+                    Logger?.Error(ex, "Failed to dispose Xygeni save listener");
+                }
+            }
+            base.Dispose(disposing);
         }
 
         public async Task ShowOutputPaneAsync()

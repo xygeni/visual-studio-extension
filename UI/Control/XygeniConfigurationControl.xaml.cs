@@ -71,30 +71,42 @@ namespace vs2026_plugin.UI.Control
             ProxyPasswordTxt.Password = proxySettings.Password;
             ProxyNonProxyHostsTxt.Text = proxySettings.NonProxyHosts;
 
+            AutoScanChk.IsChecked = _configurationService.GetAutoScan();
+
             UpdateStatusText();
         }
 
         private void UpdateStatusText()
         {
-            
+
             if (_installerService.IsInstalled)
             {
                 StatusTxt.Text = "installed";
                 StatusTxt.Foreground = new SolidColorBrush(Colors.Green);
                 RunScanBtn.IsEnabled = true;
+                AutoScanChk.IsEnabled = true;
             }
             else if (_installerService.InstallationRunning)
             {
                 StatusTxt.Text = "installing...";
                 StatusTxt.Foreground = new SolidColorBrush(Colors.Orange);
                 RunScanBtn.IsEnabled = false;
+                AutoScanChk.IsEnabled = false;
             }
             else
             {
                 StatusTxt.Text = "not installed";
                 StatusTxt.Foreground = new SolidColorBrush(Colors.Red);
                 RunScanBtn.IsEnabled = false;
+                AutoScanChk.IsEnabled = false;
             }
+        }
+
+        private void AutoScanChk_Changed(object sender, RoutedEventArgs e)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            if (!IsLoaded) return;
+            _configurationService.SaveAutoScan(AutoScanChk.IsChecked ?? false);
         }
 
         private void SaveBtn_Click(object sender, RoutedEventArgs e)

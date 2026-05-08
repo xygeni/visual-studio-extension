@@ -59,7 +59,29 @@ namespace vs2026_plugin.Commands
             vs2026_pluginPackage.Instance?.Logger?.Show();
 
             XygeniScannerService.GetInstance().RunAnalysisAsync(rootDir, scannerPath);
-        }   
+        }
+
+        public static async Task RunIncrementalScanAsync()
+        {
+            string rootDir = await XygeniConfigurationService.GetInstance().GetRootDirectoryAsync();
+
+            if (string.IsNullOrEmpty(rootDir))
+            {
+                MessageBox.Show("Please open a solution or project first.", "Xygeni Explorer", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string scannerPath = XygeniInstallerService.GetInstance().GetScannerInstallationDir();
+            if (string.IsNullOrEmpty(scannerPath) || !XygeniInstallerService.GetInstance().IsInstalled)
+            {
+                MessageBox.Show("Xygeni Scanner is not installed. Please configure it in Xygeni Settings.", "Xygeni Explorer", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            vs2026_pluginPackage.Instance?.Logger?.Show();
+
+            await XygeniScannerService.GetInstance().RunIncrementalAnalysisAsync(rootDir, scannerPath);
+        }
 
     }
 }

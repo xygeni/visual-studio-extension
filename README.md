@@ -15,6 +15,7 @@ Xygeni Security Scanner is a powerful extension that brings comprehensive securi
   - **IaC (Infrastructure as Code):** Scan your IaC files (e.g., Terraform, CloudFormation) for misconfigurations.
   - **Misconfigurations:** Detect security misconfigurations in your application and services.
 - **Remediation actions for SCA and SAST Issues:** Automatically detect and provide remediation guidance for vulnerabilities found in your source code and dependencies, enabling quick fixes directly within VS Code.
+- **Incremental Scan on Save (opt-in):** When enabled, saving a file triggers a debounced incremental scan (`xygeni scan --incremental`) so you get fast feedback while you code. Disabled by default; toggle it from the Xygeni Settings panel.
 - **Seamless Integration:** The extension adds a dedicated Xygeni view to your activity bar for easy access.
 - **Guided Setup:** A simple configuration process to connect to the Xygeni service.
 - **In-Editor Issue Highlighting:** View security findings directly in your code, making it easy to pinpoint and fix issues.
@@ -45,6 +46,7 @@ Xygeni Security Scanner is a powerful extension that brings comprehensive securi
 
 *   **Xygeni API URL**: The URL of the Xygeni API server.
 *   **Xygeni API Token**: The API token for authentication.
+*   **Auto-run incremental scan on save**: When checked, saving any source file in the open solution/folder triggers a debounced (1s) incremental scan in the background. Off by default. Available only after the scanner has been installed.
 
 ## Support
 
