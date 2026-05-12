@@ -304,6 +304,7 @@ namespace vs2026_plugin.Services
                     Container = raw_vuln["container"]?.ToString(),
                     Language = raw_vuln["language"]?.ToString(),
                     CodeFlows = ParseCodeFlows(raw_vuln["codeFlows"] as JArray),
+                    RawJson = raw_vuln.ToString(Formatting.None),
                     RemediableLevel = AbstractXygeniIssue.RemediableAuto
                 };
                 _issues.Add(issue);

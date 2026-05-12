@@ -113,6 +113,10 @@ namespace vs2026_plugin.Services
                     {
                         await OpenFileAtAsync(msg.File, msg.BeginLine, msg.BeginColumn);
                     }
+                    else if (msg.Command == "aiExplain")
+                    {
+                        HandleAiExplainAsync(msg.IssueId);
+                    }
                 }
                 catch(Exception ex)
                 {
@@ -193,6 +197,78 @@ namespace vs2026_plugin.Services
             {
                 _logger?.Error(ex, "Error opening file");
             }
+        }
+
+        private void HandleAiExplainAsync(string issueId)
+        {
+            _logger?.Log($"AI Explain requested for issue {issueId}");
+
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                string markdown = null;
+                string errorMessage = null;
+                try
+                {
+                    var issue = XygeniIssueService.GetInstance()?.FindIssueById(issueId);
+                    if (issue == null)
+                    {
+                        errorMessage = "Issue not found.";
+                    }
+                    else
+                    {
+                        var installer = XygeniInstallerService.GetInstance();
+                        if (!installer.IsInstalled)
+                        {
+                            errorMessage = "Xygeni Scanner is not installed.";
+                        }
+                        else
+                        {
+                            string scannerPath = installer.GetScannerInstallationDir();
+                            markdown = await AIExplainService.GetInstance().ExplainAsync(issue, scannerPath, _logger);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.Error(ex, "AI Explain failed");
+                    errorMessage = ex.Message;
+                }
+
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                if (_window == null) return;
+                var control = _window.Content as IssueDetailsControl;
+                if (control == null) return;
+
+                object reply;
+                if (!string.IsNullOrEmpty(markdown))
+                {
+                    string html;
+                    try
+                    {
+                        // DisableHtml: the markdown comes from an LLM and may include the
+                        // raw issue JSON (controllable via file paths / code snippets), so
+                        // we don't trust raw HTML to be safe inside the WebView2.
+                        var pipeline = new Markdig.MarkdownPipelineBuilder()
+                            .UseAdvancedExtensions()
+                            .DisableHtml()
+                            .Build();
+                        html = Markdig.Markdown.ToHtml(markdown, pipeline);
+                    }
+                    catch (Exception renderEx)
+                    {
+                        _logger?.Error(renderEx, "AI Explain markdown rendering failed");
+                        reply = new { status = "aiExplainError", issueId = issueId, message = renderEx.Message };
+                        control.PostMessage(JsonConvert.SerializeObject(reply));
+                        return;
+                    }
+                    reply = new { status = "aiExplainReady", issueId = issueId, html = html };
+                }
+                else
+                {
+                    reply = new { status = "aiExplainError", issueId = issueId, message = errorMessage ?? "Unknown error" };
+                }
+                control.PostMessage(JsonConvert.SerializeObject(reply));
+            });
         }
 
         private void HandleRemediationView(IssueDetailsMessage message)
@@ -419,6 +495,23 @@ namespace vs2026_plugin.Services
                     <div class='message'>no issue selected</div>
                 </body>
                 </html>";
+        }
+
+        private string GetAiExplainTabContent(IXygeniIssue issue)
+        {
+            if (!(issue is SastXygeniIssue))
+            {
+                return string.Empty;
+            }
+
+            // Placeholder only. The CLI request is fired by the JS handler when the user
+            // first clicks the AI EXPLANATION tab (see activateAiTab in GenerateHtml).
+            return @"
+            <div id='content-5' class='tab-content'>
+                <div id='ai-explain-pane'>
+                    <div class='ai-explain-intro'>Click <b>AI EXPLANATION</b> to generate an AI-powered explanation for this issue. No request is sent until you open the tab.</div>
+                </div>
+            </div>";
         }
 
         private string GetCodeFlowTabContent(IXygeniIssue issue)
@@ -652,6 +745,17 @@ namespace vs2026_plugin.Services
                     .xy-flow-step-path {{ font-size: 11px; opacity: 0.7; margin-top: 2px; }}
                     .xy-flow-step-details {{ font-size: 11px; opacity: 0.85; margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap; }}
                     .xy-flow-step pre {{ margin: 6px 0 0; background: rgba(128,128,128,0.1); padding: 6px; border-radius: 3px; overflow-x: auto; font-size: 12px; }}
+
+                    /* AI Explanation */
+                    .ai-loading {{ font-size: 13px; opacity: 0.8; padding: 16px 0; }}
+                    .ai-loading::after {{ content: '...'; display: inline-block; animation: ai-dots 1.2s steps(4) infinite; width: 1.5em; vertical-align: bottom; overflow: hidden; }}
+                    @keyframes ai-dots {{ to {{ width: 0; }} }}
+                    .ai-error {{ color: #d35454; padding: 16px 0; }}
+                    .ai-error .xy-button {{ margin-top: 12px; }}
+                    .ai-explain-md {{ font-size: 13px; line-height: 1.5; }}
+                    .ai-explain-md h1, .ai-explain-md h2, .ai-explain-md h3 {{ font-size: 14px; margin-top: 15px; margin-bottom: 5px; }}
+                    .ai-explain-md code {{ font-family: Consolas, monospace; background-color: rgba(128,128,128,0.1); padding: 2px 4px; border-radius: 3px; }}
+                    .ai-explain-md pre {{ background-color: rgba(128,128,128,0.1); padding: 10px; border-radius: 3px; overflow-x: auto; }}
                ";
                
                string severityClass = $"severity-{issue.Severity?.ToLower() ?? "info"}";
@@ -666,22 +770,73 @@ namespace vs2026_plugin.Services
                     <meta charset=""UTF-8"">
                     <style>{css}</style>
                     <script>
+                        const ISSUE_ID = '{issue.Id}';
+                        let aiExplainRequested = false;
+
                         function showTab(id) {{
                             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                             document.getElementById('tab-btn-' + id).classList.add('active');
                             document.getElementById('content-' + id).classList.add('active');
                         }}
-                        
+
                         function openFile() {{
-                             chrome.webview.postMessage(JSON.stringify({{ command: 'openFile', issueId: '{issue.Id}' }}));
+                             chrome.webview.postMessage(JSON.stringify({{ command: 'openFile', issueId: ISSUE_ID }}));
+                        }}
+
+                        function activateAiTab() {{
+                            showTab(5);
+                            if (aiExplainRequested) return;
+                            aiExplainRequested = true;
+                            const pane = document.getElementById('ai-explain-pane');
+                            if (pane) {{
+                                pane.innerHTML = ""<div class='ai-loading'>Generating AI explanation</div>"";
+                            }}
+                            chrome.webview.postMessage(JSON.stringify({{ command: 'aiExplain', issueId: ISSUE_ID }}));
+                        }}
+
+                        function retryAiExplain() {{
+                            aiExplainRequested = false;
+                            activateAiTab();
+                        }}
+
+                        function escapeHtml(s) {{
+                            if (s == null) return '';
+                            return String(s)
+                                .replace(/&/g, '&amp;')
+                                .replace(/</g, '&lt;')
+                                .replace(/>/g, '&gt;')
+                                .replace(/""/g, '&quot;')
+                                .replace(/'/g, '&#39;');
                         }}
 
                         function onMessage(event) {{
-                            console.log(event.data);
-                            const message = JSON.parse(event.data);
+                            let message;
+                            try {{ message = JSON.parse(event.data); }} catch (e) {{ return; }}
+
                             if (message.command === '{XYGENI_STATUS_DIFF_VIEW_OPENED}') {{
-                                alert('save');
+                                return;
+                            }}
+
+                            if (message.status === 'aiExplainReady') {{
+                                if (message.issueId && message.issueId !== ISSUE_ID) return;
+                                const pane = document.getElementById('ai-explain-pane');
+                                if (pane) pane.innerHTML = ""<div class='ai-explain-md'>"" + (message.html || '') + ""</div>"";
+                                return;
+                            }}
+
+                            if (message.status === 'aiExplainError') {{
+                                if (message.issueId && message.issueId !== ISSUE_ID) return;
+                                const pane = document.getElementById('ai-explain-pane');
+                                if (pane) {{
+                                    pane.innerHTML =
+                                        ""<div class='ai-error'>"" +
+                                        ""<div><b>AI Explain failed.</b></div>"" +
+                                        ""<div>"" + escapeHtml(message.message || '') + ""</div>"" +
+                                        ""<button class='xy-button' onclick='retryAiExplain()'>Retry</button>"" +
+                                        ""</div>"";
+                                }}
+                                return;
                             }}
                         }}
                         chrome.webview.addEventListener('message', onMessage);
@@ -710,6 +865,7 @@ namespace vs2026_plugin.Services
                          <!-- Add Remediation tab if needed -->
                          {issue.GetRemediationTab()}
                          {issue.GetCodeFlowTab()}
+                         {issue.GetAiExplainTab()}
                     </div>
 
                     <div class='content-area'>
@@ -728,6 +884,7 @@ namespace vs2026_plugin.Services
 
                         {issue.GetRemediationTabContent()}
                         {GetCodeFlowTabContent(issue)}
+                        {GetAiExplainTabContent(issue)}
                     </div>
                 </body>
                 </html>";

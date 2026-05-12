@@ -261,6 +261,118 @@ namespace vs2026_plugin.Services
             await CallScannerAsync(xygeniInstallPath, args, logger, Path.GetDirectoryName(filePath));
         }
 
+        public async Task RunAiExplainCommandAsync(string issueJson, string outputFile, string xygeniInstallPath, ILogger logger)
+        {
+            // The issue JSON may contain arbitrary characters (quotes, backslashes, newlines).
+            // Rather than escape it through the PowerShell command line, we write it to a temp
+            // file and have a PS -Command snippet read it back at the other end. That keeps the
+            // .ps1 wrapper that ships with the scanner untouched.
+            if (_scannerRunning)
+            {
+                throw new Exception("Scanner is already running");
+            }
+            _scannerRunning = true;
+            try
+            {
+                string outputDir = Path.GetDirectoryName(outputFile);
+                if (!string.IsNullOrEmpty(outputDir))
+                {
+                    Directory.CreateDirectory(outputDir);
+                }
+                string inputJsonPath = Path.Combine(
+                    string.IsNullOrEmpty(outputDir) ? Path.GetTempPath() : outputDir,
+                    $"ai-explain-input-{Guid.NewGuid():N}.json");
+                File.WriteAllText(inputJsonPath, issueJson ?? string.Empty);
+
+                try
+                {
+                    await ExecuteAiExplainAsync(xygeniInstallPath, inputJsonPath, outputFile, logger);
+                }
+                finally
+                {
+                    try { File.Delete(inputJsonPath); } catch { /* best-effort cleanup */ }
+                }
+            }
+            finally
+            {
+                _scannerRunning = false;
+            }
+        }
+
+        private async Task ExecuteAiExplainAsync(string xygeniInstallPath, string inputJsonPath, string outputFile, ILogger logger)
+        {
+            await Task.Run(async () =>
+            {
+                if (string.IsNullOrEmpty(xygeniInstallPath))
+                {
+                    throw new Exception("Xygeni scanner path not configured");
+                }
+
+                string scannerScriptPath = GetScannerScriptPath(xygeniInstallPath);
+
+                var env = new Dictionary<string, string>();
+                await GetEnvVariables(env);
+
+                string psCommand =
+                    $"$json = [System.IO.File]::ReadAllText('{EscapePsSingleQuoted(inputJsonPath)}'); " +
+                    $"& '{EscapePsSingleQuoted(scannerScriptPath)}' util ai-explain --issue-json $json -f '{EscapePsSingleQuoted(outputFile)}'";
+
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = "powershell",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WorkingDirectory = Path.GetTempPath(),
+                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{psCommand.Replace("\"", "\\\"")}\""
+                };
+
+                foreach (var kvp in env)
+                {
+                    if (startInfo.EnvironmentVariables.ContainsKey(kvp.Key))
+                        startInfo.EnvironmentVariables[kvp.Key] = kvp.Value;
+                    else
+                        startInfo.EnvironmentVariables.Add(kvp.Key, kvp.Value);
+                }
+
+                logger.Log($"  Running AI Explain: powershell {startInfo.Arguments}");
+
+                using (var process = new Process { StartInfo = startInfo })
+                {
+                    process.OutputDataReceived += (sender, e) =>
+                    {
+                        if (e.Data != null) logger.Log(StripAnsiEscapeSequences(e.Data));
+                    };
+                    process.ErrorDataReceived += (sender, e) =>
+                    {
+                        if (e.Data != null) logger.Log(StripAnsiEscapeSequences(e.Data));
+                    };
+
+                    process.Start();
+                    process.BeginOutputReadLine();
+                    process.BeginErrorReadLine();
+
+                    bool exited = process.WaitForExit(TimeoutMs);
+                    if (!exited)
+                    {
+                        try { process.Kill(); } catch { }
+                        throw new Exception("AI Explain process timeout");
+                    }
+
+                    if (process.ExitCode != 0 && process.ExitCode <= 128)
+                    {
+                        throw new Exception($"AI Explain process failed with exit code {process.ExitCode}");
+                    }
+                }
+            });
+        }
+
+        private static string EscapePsSingleQuoted(string s)
+        {
+            return (s ?? string.Empty).Replace("'", "''");
+        }
+
         private async Task CallScannerAsync(string xygeniInstallPath, List<string> args, ILogger logger, string workingDir)
         {
             if (_scannerRunning)

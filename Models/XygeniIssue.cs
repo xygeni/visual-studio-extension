@@ -122,6 +122,8 @@ namespace vs2026_plugin.Models
 
         public virtual string GetCodeFlowTab() => "";
 
+        public virtual string GetAiExplainTab() => "";
+
         public virtual string GetSubtitleLineHtml()
         {
             string subtitle = CategoryName;
