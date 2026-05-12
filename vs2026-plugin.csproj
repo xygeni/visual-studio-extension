@@ -74,9 +74,12 @@
     <Compile Include="Models\IaCXygeniIssue.cs" />
     <Compile Include="Models\MisconfXygeniIssue.cs" />
     <Compile Include="Models\SastXygeniIssue.cs" />
+    <Compile Include="Models\CodeFlow.cs" />
+    <Compile Include="Models\CodeFlowFrame.cs" />
     <Compile Include="Models\SecretsXygeniIssue.cs" />
     <Compile Include="Models\VulnXygeniIssue.cs" />
     <Compile Include="Services\IssueDetailsService.cs" />
+    <Compile Include="Services\CodeFlowScripts.cs" />
     <Compile Include="Editor\XygeniIssueErrorTagger.cs" />
     <Compile Include="Editor\XygeniDocumentSaveListener.cs" />
     <Compile Include="UI\Window\IssueDetailsToolWindow.cs" />

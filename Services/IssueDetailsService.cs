@@ -91,10 +91,10 @@ namespace vs2026_plugin.Services
              ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
             {
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                try 
+                try
                 {
                     IssueDetailsMessage msg = JsonConvert.DeserializeObject<IssueDetailsMessage>(message);
-                    
+
                     if (msg.Command == "openFile")
                     {
                         // Find the issue and open the file
@@ -109,12 +109,55 @@ namespace vs2026_plugin.Services
                     {
                         HandleRemediationView(msg);
                     }
+                    else if (msg.Command == "jumpToFrame")
+                    {
+                        await OpenFileAtAsync(msg.File, msg.BeginLine, msg.BeginColumn);
+                    }
                 }
                 catch(Exception ex)
                 {
                     _logger?.Error(ex, "Error handling web message");
                 }
             });
+        }
+
+        private async Task OpenFileAtAsync(string file, int beginLine, int beginColumn)
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            try
+            {
+                if (string.IsNullOrEmpty(file)) return;
+
+                string filePath = file;
+                if (!Path.IsPathRooted(filePath))
+                {
+                    string rootDir = await XygeniConfigurationService.GetInstance().GetRootDirectoryAsync();
+                    if (!string.IsNullOrEmpty(rootDir))
+                    {
+                        filePath = Path.Combine(rootDir, filePath);
+                    }
+                }
+
+                if (!File.Exists(filePath)) return;
+
+                var dte = ServiceProvider.GlobalProvider.GetService(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
+                if (dte == null) return;
+
+                var window = dte.ItemOperations.OpenFile(filePath);
+                if (window == null) return;
+
+                if (beginLine <= 0) return;
+
+                var selection = dte.ActiveDocument?.Selection as EnvDTE.TextSelection;
+                if (selection != null)
+                {
+                    selection.MoveToLineAndOffset(beginLine, Math.Max(1, beginColumn), false);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, "Error opening file at frame");
+            }
         }
 
         private async Task OpenFileAsync(IXygeniIssue issue)
@@ -378,6 +421,103 @@ namespace vs2026_plugin.Services
                 </html>";
         }
 
+        private string GetCodeFlowTabContent(IXygeniIssue issue)
+        {
+            if (!(issue is SastXygeniIssue sastIssue) || !sastIssue.HasCodeFlow)
+            {
+                return string.Empty;
+            }
+
+            var (nodesJson, linksJson, pathsJson) = BuildCodeFlowDataModel(sastIssue.CodeFlows);
+
+            string script = CodeFlowScripts.MainScript
+                .Replace("__NODES_PLACEHOLDER__", nodesJson)
+                .Replace("__LINKS_PLACEHOLDER__", linksJson)
+                .Replace("__PATHS_PLACEHOLDER__", pathsJson);
+
+            return $@"
+            <div id='content-4' class='tab-content'>
+                <div class='xy-code-flow-container'>
+                    <div class='xy-view-toggle'>
+                        <button id='btn-graph' class='xy-toggle-btn active'>Graph view</button>
+                        <button id='btn-text' class='xy-toggle-btn'>Path</button>
+                    </div>
+                    <div id='code-flow-container' class='code-flow-wrapper'></div>
+                </div>
+                <script src='https://d3js.org/d3.v7.min.js'></script>
+                <script>
+{CodeFlowScripts.DiagramFunctions}
+{script}
+                </script>
+            </div>";
+        }
+
+        private (string nodes, string links, string paths) BuildCodeFlowDataModel(System.Collections.Generic.List<CodeFlow> codeFlows)
+        {
+            var nodes = new System.Collections.Generic.List<object>();
+            var links = new System.Collections.Generic.List<object>();
+            var paths = new System.Collections.Generic.List<System.Collections.Generic.List<string>>();
+            var seenKeys = new System.Collections.Generic.HashSet<string>();
+
+            foreach (var flow in codeFlows)
+            {
+                var currentPath = new System.Collections.Generic.List<string>();
+                string prevId = null;
+                int level = 0;
+
+                if (flow?.Frames == null) { paths.Add(currentPath); continue; }
+
+                foreach (var frame in flow.Frames)
+                {
+                    string baseId = $"{frame.FilePath}:{frame.BeginLine}";
+                    string key = $"{baseId}__{level}";
+
+                    if (!seenKeys.Contains(key))
+                    {
+                        seenKeys.Add(key);
+                        string fileName = Path.GetFileName(frame.FilePath ?? "");
+                        nodes.Add(new
+                        {
+                            id = baseId,
+                            level = level,
+                            label = $"{fileName} ({frame.BeginLine})",
+                            filePath = frame.FilePath,
+                            line = frame.BeginLine,
+                            code = frame.Code,
+                            type = frame.Kind,
+                            category = frame.Category,
+                            container = frame.Container,
+                            injectionPoint = frame.InjectPoint,
+                            beginLine = frame.BeginLine,
+                            beginColumn = frame.BeginColumn,
+                            endLine = frame.EndLine,
+                            endColumn = frame.EndColumn
+                        });
+                    }
+
+                    currentPath.Add(baseId);
+
+                    if (prevId != null)
+                    {
+                        links.Add(new
+                        {
+                            source = $"{prevId}__{level - 1}",
+                            target = key
+                        });
+                    }
+                    prevId = baseId;
+                    level++;
+                }
+                paths.Add(currentPath);
+            }
+
+            return (
+                JsonConvert.SerializeObject(nodes),
+                JsonConvert.SerializeObject(links),
+                JsonConvert.SerializeObject(paths)
+            );
+        }
+
         private string GenerateHtml(IXygeniIssue issue)
         {
             try 
@@ -470,15 +610,53 @@ namespace vs2026_plugin.Services
                         border: 1px solid #536DF7;
                         min-height: 22px !important;
                         padding-left: 2px;
-                        padding-right: 2px; 
-                        padding-top: 5px; 
+                        padding-right: 2px;
+                        padding-top: 5px;
                         margin-right: 2px;
                         text-wrap: nowrap;
                     }}
+
+                    /* Code Flow */
+                    .xy-code-flow-container {{ position: relative; width: 100%; }}
+                    .xy-view-toggle {{ display: flex; gap: 6px; margin-bottom: 10px; }}
+                    .xy-toggle-btn {{
+                        background: transparent; color: var(--vs-foreground);
+                        border: 1px solid var(--vs-border); padding: 4px 10px;
+                        font-size: 12px; cursor: pointer; border-radius: 3px;
+                    }}
+                    .xy-toggle-btn.active {{ background: var(--vs-accent); color: #fff; border-color: var(--vs-accent); }}
+                    .code-flow-wrapper {{ width: 100%; min-height: 320px; overflow: hidden; position: relative; }}
+                    .xy-zoom-controls {{ position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; }}
+                    .xy-zoom-btn {{
+                        width: 24px; height: 24px; background: var(--vs-background);
+                        color: var(--vs-foreground); border: 1px solid var(--vs-border);
+                        cursor: pointer; border-radius: 3px; line-height: 1; font-size: 14px;
+                    }}
+                    .tooltip {{
+                        position: absolute; pointer-events: none; opacity: 0;
+                        background: var(--vs-background); color: var(--vs-foreground);
+                        border: 1px solid var(--vs-border); padding: 6px 8px;
+                        border-radius: 3px; font-size: 12px; max-width: 320px;
+                    }}
+                    .tooltip pre {{ margin: 4px 0 0; background: rgba(128,128,128,0.1); padding: 4px; border-radius: 3px; overflow-x: auto; }}
+                    .xy-text-flow-container {{ display: flex; flex-direction: column; gap: 8px; }}
+                    .xy-flow-step {{
+                        border: 1px solid var(--vs-border); border-radius: 4px;
+                        padding: 8px 10px; background: rgba(128,128,128,0.05);
+                        cursor: pointer;
+                    }}
+                    .xy-flow-step:hover {{ background: rgba(128,128,128,0.12); }}
+                    .xy-flow-step-header {{ display: flex; justify-content: space-between; font-weight: 600; }}
+                    .xy-flow-step-file {{ font-family: Consolas, monospace; font-size: 12px; }}
+                    .xy-flow-step-type {{ font-size: 11px; opacity: 0.75; text-transform: uppercase; }}
+                    .xy-flow-step-path {{ font-size: 11px; opacity: 0.7; margin-top: 2px; }}
+                    .xy-flow-step-details {{ font-size: 11px; opacity: 0.85; margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap; }}
+                    .xy-flow-step pre {{ margin: 6px 0 0; background: rgba(128,128,128,0.1); padding: 6px; border-radius: 3px; overflow-x: auto; font-size: 12px; }}
                ";
                
                string severityClass = $"severity-{issue.Severity?.ToLower() ?? "info"}";
-               string explanation = issue.Explanation.Length > 30 ? issue.Explanation.Substring(0, 30) + "..." : issue.Explanation;
+               string explanationText = issue.Explanation ?? string.Empty;
+               string explanation = explanationText.Length > 30 ? explanationText.Substring(0, 30) + "..." : explanationText;
                
                // Construct HTML
                return $@"
@@ -531,23 +709,25 @@ namespace vs2026_plugin.Services
                         <div id='tab-btn-2' class='tab' onclick='showTab(2)'>CODE</div>
                          <!-- Add Remediation tab if needed -->
                          {issue.GetRemediationTab()}
+                         {issue.GetCodeFlowTab()}
                     </div>
-                    
+
                     <div class='content-area'>
                         <div id='content-1' class='tab-content active'>
                             {issue.GetIssueDetailsHtml()}
-                            
+
                             <div class='explanation'>
                                 <h3>Explanation</h3>
                                 {issue.GetExplanationHtml()}
                             </div>
                         </div>
-                        
+
                         <div id='content-2' class='tab-content'>
                             {issue.GetCodeSnippetHtml()}
                         </div>
 
                         {issue.GetRemediationTabContent()}
+                        {GetCodeFlowTabContent(issue)}
                     </div>
                 </body>
                 </html>";
@@ -568,7 +748,6 @@ namespace vs2026_plugin.Services
                 <head>
                     <meta charset=""UTF-8"">
                     <style>{css}</style>
-                    </script>
                 </head>
                 <body>
                     <div class='header'>
@@ -586,5 +765,9 @@ namespace vs2026_plugin.Services
         public string IssueId { get; set; }
         public string Kind { get; set; }
         public string File { get; set; }
+        public int BeginLine { get; set; }
+        public int EndLine { get; set; }
+        public int BeginColumn { get; set; }
+        public int EndColumn { get; set; }
     }
 }
