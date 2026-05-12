@@ -41,6 +41,8 @@ namespace vs2026_plugin.Commands
         }
 
         public static void RunScan()    {
+            if (!EnsureLicense()) return;
+
             string rootDir = XygeniConfigurationService.GetInstance().GetRootDirectoryAsync().Result;
 
             if (string.IsNullOrEmpty(rootDir))
@@ -61,8 +63,29 @@ namespace vs2026_plugin.Commands
             XygeniScannerService.GetInstance().RunAnalysisAsync(rootDir, scannerPath);
         }
 
+        private static bool EnsureLicense()
+        {
+            try
+            {
+                var license = LicenseService.GetInstance();
+                if (license.LicenseChecked && !license.IsLicenseAvailable)
+                {
+                    MessageBox.Show("Xygeni IDE License is not available. Please contact your administrator.",
+                        "Xygeni", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return false;
+                }
+            }
+            catch
+            {
+                // LicenseService not yet initialized — allow (e.g. early startup race).
+            }
+            return true;
+        }
+
         public static async Task RunIncrementalScanAsync()
         {
+            if (!EnsureLicense()) return;
+
             string rootDir = await XygeniConfigurationService.GetInstance().GetRootDirectoryAsync();
 
             if (string.IsNullOrEmpty(rootDir))

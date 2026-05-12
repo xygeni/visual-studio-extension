@@ -216,15 +216,23 @@ namespace vs2026_plugin.Services
                     }
                     else
                     {
-                        var installer = XygeniInstallerService.GetInstance();
-                        if (!installer.IsInstalled)
+                        var license = LicenseService.GetInstance();
+                        if (license.LicenseChecked && !license.IsLicenseAvailable)
                         {
-                            errorMessage = "Xygeni Scanner is not installed.";
+                            errorMessage = "Xygeni IDE License is not available.";
                         }
                         else
                         {
-                            string scannerPath = installer.GetScannerInstallationDir();
-                            markdown = await AIExplainService.GetInstance().ExplainAsync(issue, scannerPath, _logger);
+                            var installer = XygeniInstallerService.GetInstance();
+                            if (!installer.IsInstalled)
+                            {
+                                errorMessage = "Xygeni Scanner is not installed.";
+                            }
+                            else
+                            {
+                                string scannerPath = installer.GetScannerInstallationDir();
+                                markdown = await AIExplainService.GetInstance().ExplainAsync(issue, scannerPath, _logger);
+                            }
                         }
                     }
                 }
@@ -279,6 +287,12 @@ namespace vs2026_plugin.Services
             {
                 try
                 {
+                    var license = LicenseService.GetInstance();
+                    if (license.LicenseChecked && !license.IsLicenseAvailable)
+                    {
+                        _logger?.Log("Remediation skipped: Xygeni IDE License is not available.");
+                        return;
+                    }
                     string scannerPath = XygeniInstallerService.GetInstance().GetScannerInstallationDir();
                     var remediationService = RemediationService.GetInstance(_logger);
                     var fixData = await remediationService.LaunchRemediationPreviewAsync(message.Kind, message.IssueId, message.File, scannerPath);

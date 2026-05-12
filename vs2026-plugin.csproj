@@ -81,6 +81,7 @@
     <Compile Include="Services\IssueDetailsService.cs" />
     <Compile Include="Services\CodeFlowScripts.cs" />
     <Compile Include="Services\AIExplainService.cs" />
+    <Compile Include="Services\LicenseService.cs" />
     <Compile Include="Editor\XygeniIssueErrorTagger.cs" />
     <Compile Include="Editor\XygeniDocumentSaveListener.cs" />
     <Compile Include="UI\Window\IssueDetailsToolWindow.cs" />

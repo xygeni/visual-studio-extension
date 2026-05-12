@@ -23,19 +23,32 @@ namespace vs2026_plugin.UI.Control
         private readonly XygeniConfigurationService _configurationService;
         private readonly XygeniInstallerService _installerService;
         private readonly XygeniScannerService _scannerService;
+        private readonly LicenseService _licenseService;
 
         public XygeniConfigurationControl()
         {
             InitializeComponent();
             _configurationService = XygeniConfigurationService.GetInstance();
-            
+
             _installerService = XygeniInstallerService.GetInstance();
             _installerService.Changed += OnInstallerServiceChanged;
 
             _scannerService = XygeniScannerService.GetInstance();
             _scannerService.Changed += OnScannerServiceChanged;
 
+            _licenseService = LicenseService.GetInstance();
+            _licenseService.Changed += OnLicenseServiceChanged;
+
             LoadSettings();
+        }
+
+        private void OnLicenseServiceChanged(object sender, EventArgs e)
+        {
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                UpdateStatusText();
+            });
         }
 
         private void OnInstallerServiceChanged(object sender, EventArgs e)
@@ -78,6 +91,16 @@ namespace vs2026_plugin.UI.Control
 
         private void UpdateStatusText()
         {
+            bool licensed = _licenseService.IsLicenseAvailable;
+
+            if (!licensed && _licenseService.LicenseChecked)
+            {
+                StatusTxt.Text = "IDE License not available";
+                StatusTxt.Foreground = new SolidColorBrush(Colors.Red);
+                RunScanBtn.IsEnabled = false;
+                AutoScanChk.IsEnabled = false;
+                return;
+            }
 
             if (_installerService.IsInstalled)
             {
@@ -167,6 +190,17 @@ namespace vs2026_plugin.UI.Control
                         await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
                         StatusTxt.Text = "API Token not valid";
                         RunScanBtn.IsEnabled = false;
+                        return;
+                    }
+
+                    if (!await LicenseService.GetInstance().IsValidLicenseAsync(apiUrl, token))
+                    {
+                        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                        StatusTxt.Text = "IDE License not available";
+                        RunScanBtn.IsEnabled = false;
+                        AutoScanChk.IsEnabled = false;
+                        MessageBox.Show("No Xygeni IDE License available. Please contact your administrator for more details.",
+                            "Xygeni Configuration", MessageBoxButton.OK, MessageBoxImage.Warning);
                         return;
                     }
 

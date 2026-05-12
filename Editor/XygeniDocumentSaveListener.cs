@@ -137,6 +137,12 @@ namespace vs2026_plugin.Editor
                         return;
                     }
 
+                    var license = LicenseService.GetInstance();
+                    if (license.LicenseChecked && !license.IsLicenseAvailable)
+                    {
+                        return;
+                    }
+
                     var scanner = XygeniScannerService.GetInstance();
                     if (scanner.IsScannerRunning())
                     {
