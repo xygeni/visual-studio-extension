@@ -14,7 +14,7 @@ namespace vs2026_plugin.Models
 
         /// <summary>
         /// Verbatim JSON node from the scanner report. Preserved so the AI Explain
-        /// CLI can be fed the exact shape it expects (--issue-json).
+        /// CLI can be fed the exact shape it expects (--issue-json-file).
         /// </summary>
         public string RawJson { get; set; }
 
