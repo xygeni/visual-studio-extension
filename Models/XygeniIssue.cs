@@ -38,6 +38,8 @@ namespace vs2026_plugin.Models
         string GetExplanationHtml();
         string GetRemediationTab();
         string GetRemediationTabContent();
+        string GetCodeFlowTab();
+        string GetAiExplainTab();
         string GetTags();
         string Field(string name, string value);
 
