@@ -24,10 +24,16 @@ namespace vs2026_plugin.Services
             Log($"ERROR: {message} - {ex.Message}"); 
             Log($"Stack trace: {ex.ToString()}");
         }
-        public void Show() 
-        { 
-            ThreadHelper.ThrowIfNotOnUIThread();
-            _outputPane.Activate(); 
+        public void Show()
+        {
+            // Callers may invoke this from background threads (e.g. continuations
+            // after Task.Run / awaited HTTP calls). _outputPane.Activate() is a
+            // COM call that requires the UI thread, so marshal there explicitly.
+            ThreadHelper.JoinableTaskFactory.Run(async () =>
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                _outputPane.Activate();
+            });
         }
     }
 
