@@ -51,11 +51,5 @@ namespace vs2026_plugin.Models
             if (!HasCodeFlow) return string.Empty;
             return "<div id='tab-btn-4' class='tab' onclick='showTab(4)'>CODE FLOW</div>";
         }
-
-        public override string GetAiExplainTab()
-        {
-            // AI Explain is offered for every SAST issue. The CLI call only fires on tab click.
-            return "<div id='tab-btn-5' class='tab' onclick='activateAiTab()'>AI EXPLANATION</div>";
-        }
     }
 }

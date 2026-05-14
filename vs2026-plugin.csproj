@@ -88,6 +88,9 @@
     <Compile Include="UI\Control\ApplyChangesDialog.xaml.cs">
       <DependentUpon>ApplyChangesDialog.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Control\AiExplainDialog.xaml.cs">
+      <DependentUpon>AiExplainDialog.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\Control\IssueDetailsControl.xaml.cs">
       <DependentUpon>IssueDetailsControl.xaml</DependentUpon>
     </Compile>
@@ -106,6 +109,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="UI\Control\ApplyChangesDialog.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="UI\Control\AiExplainDialog.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

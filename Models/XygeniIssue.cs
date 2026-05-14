@@ -39,7 +39,6 @@ namespace vs2026_plugin.Models
         string GetRemediationTab();
         string GetRemediationTabContent();
         string GetCodeFlowTab();
-        string GetAiExplainTab();
         string GetTags();
         string Field(string name, string value);
 
@@ -123,8 +122,6 @@ namespace vs2026_plugin.Models
         public abstract string GetCodeSnippetHtmlTab();
 
         public virtual string GetCodeFlowTab() => "";
-
-        public virtual string GetAiExplainTab() => "";
 
         public virtual string GetSubtitleLineHtml()
         {

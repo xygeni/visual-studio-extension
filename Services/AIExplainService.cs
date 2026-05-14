@@ -8,7 +8,7 @@ namespace vs2026_plugin.Services
 {
     /// <summary>
     /// Drives the `xygeni util ai-explain` CLI invocation on demand and caches the result
-    /// per issue id, so reopening the AI EXPLANATION tab for the same issue does not
+    /// per issue id, so reopening the AI Explain dialog for the same issue does not
     /// re-spend tokens. The cache is in-memory only (process lifetime).
     /// </summary>
     public class AIExplainService
