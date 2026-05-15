@@ -26,6 +26,7 @@ namespace vs2026_plugin.Services
         private const string ProxyUsernameKey = "ProxyUsername";
         private const string ProxyPasswordKey = "ProxyPassword";
         private const string ProxyNonProxyHostsKey = "ProxyNonProxyHosts";
+        private const string AutoScanKey = "AutoScan";
         private const string MetadataFolderKey = ".xygenidata";
 
         private readonly SettingsManager _settingsManager;
@@ -127,6 +128,23 @@ namespace vs2026_plugin.Services
             }
 
             return proxySettings;
+        }
+
+        public bool GetAutoScan()
+        {
+            var store = _settingsManager.GetReadOnlySettingsStore(SettingsScope.UserSettings);
+            if (!store.CollectionExists(CollectionPath))
+            {
+                return false;
+            }
+
+            return store.GetBoolean(CollectionPath, AutoScanKey, false);
+        }
+
+        public void SaveAutoScan(bool autoScan)
+        {
+            var store = GetWritableStore();
+            store.SetBoolean(CollectionPath, AutoScanKey, autoScan);
         }
 
         public void SaveProxySettings(ProxySettings proxySettings)

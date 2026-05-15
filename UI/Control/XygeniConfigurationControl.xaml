@@ -84,6 +84,14 @@
                 </StackPanel>
             </Expander>
 
+            <CheckBox x:Name="AutoScanChk"
+                Content="Auto-run incremental scan on save"
+                Margin="0,0,0,10"
+                IsEnabled="False"
+                Checked="AutoScanChk_Changed"
+                Unchecked="AutoScanChk_Changed"
+                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+
             <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                 <TextBlock Text="Xygeni Scanner Status: "
                     Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>

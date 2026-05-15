@@ -58,6 +58,7 @@
     <Compile Include="UI\Control\XygeniExplorerViewModel.cs" />
     <Compile Include="Commands\XygeniSettingsCommand.cs" />
     <Compile Include="Commands\XygeniExplorerCommand.cs" />
+    <Compile Include="Commands\XygeniRunIncrementalScanCommand.cs" />
     <Compile Include="Commands\XygeniCommands.cs" />
     <Compile Include="Services\XygeniConfigurationService.cs" />
     <Compile Include="Services\XygeniInstallerService.cs" />
@@ -73,13 +74,22 @@
     <Compile Include="Models\IaCXygeniIssue.cs" />
     <Compile Include="Models\MisconfXygeniIssue.cs" />
     <Compile Include="Models\SastXygeniIssue.cs" />
+    <Compile Include="Models\CodeFlow.cs" />
+    <Compile Include="Models\CodeFlowFrame.cs" />
     <Compile Include="Models\SecretsXygeniIssue.cs" />
     <Compile Include="Models\VulnXygeniIssue.cs" />
     <Compile Include="Services\IssueDetailsService.cs" />
+    <Compile Include="Services\CodeFlowScripts.cs" />
+    <Compile Include="Services\AIExplainService.cs" />
+    <Compile Include="Services\LicenseService.cs" />
     <Compile Include="Editor\XygeniIssueErrorTagger.cs" />
+    <Compile Include="Editor\XygeniDocumentSaveListener.cs" />
     <Compile Include="UI\Window\IssueDetailsToolWindow.cs" />
     <Compile Include="UI\Control\ApplyChangesDialog.xaml.cs">
       <DependentUpon>ApplyChangesDialog.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Control\AiExplainDialog.xaml.cs">
+      <DependentUpon>AiExplainDialog.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Control\IssueDetailsControl.xaml.cs">
       <DependentUpon>IssueDetailsControl.xaml</DependentUpon>
@@ -99,6 +109,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="UI\Control\ApplyChangesDialog.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="UI\Control\AiExplainDialog.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
