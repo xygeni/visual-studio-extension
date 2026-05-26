@@ -40,10 +40,11 @@ namespace vs2026_plugin.Commands
             }
         }
 
-        public static void RunScan()    {
-            if (!EnsureLicense()) return;
+        public static async Task RunScan()
+        {
+            if (!await EnsureLicenseAsync()) return;
 
-            string rootDir = XygeniConfigurationService.GetInstance().GetRootDirectoryAsync().Result;
+            string rootDir = await XygeniConfigurationService.GetInstance().GetRootDirectoryAsync();
 
             if (string.IsNullOrEmpty(rootDir))
             {
@@ -63,28 +64,57 @@ namespace vs2026_plugin.Commands
             XygeniScannerService.GetInstance().RunAnalysisAsync(rootDir, scannerPath);
         }
 
-        private static bool EnsureLicense()
+        /// <summary>
+        /// Gates an interactive scan/feature on the IDE license. Forces an on-demand
+        /// validation if the seat has never been checked, so users cannot exploit the
+        /// startup race condition where _isLicenseAvailable is still in its default state.
+        /// </summary>
+        /// <param name="silent">When true, suppress the MessageBox (use for auto-scan).</param>
+        public static async Task<bool> EnsureLicenseAsync(bool silent = false)
         {
+            LicenseService license;
             try
             {
-                var license = LicenseService.GetInstance();
-                if (license.LicenseChecked && !license.IsLicenseAvailable)
-                {
-                    MessageBox.Show("Xygeni IDE License is not available. Please contact your administrator.",
-                        "Xygeni", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return false;
-                }
+                license = LicenseService.GetInstance();
             }
             catch
             {
-                // LicenseService not yet initialized — allow (e.g. early startup race).
+                if (!silent)
+                {
+                    MessageBox.Show("Xygeni IDE License is not available. Please contact your administrator.",
+                        "Xygeni", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                return false;
+            }
+
+            if (!license.LicenseChecked)
+            {
+                try
+                {
+                    var config = XygeniConfigurationService.GetInstance();
+                    await license.IsValidLicenseAsync(config.GetUrl(), config.GetToken());
+                }
+                catch
+                {
+                    // SetLicenseAvailable(false) was already called inside IsValidLicenseAsync on failure.
+                }
+            }
+
+            if (!license.IsLicenseAvailable)
+            {
+                if (!silent)
+                {
+                    MessageBox.Show("Xygeni IDE License is not available. Please contact your administrator.",
+                        "Xygeni", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                return false;
             }
             return true;
         }
 
         public static async Task RunIncrementalScanAsync()
         {
-            if (!EnsureLicense()) return;
+            if (!await EnsureLicenseAsync()) return;
 
             string rootDir = await XygeniConfigurationService.GetInstance().GetRootDirectoryAsync();
 

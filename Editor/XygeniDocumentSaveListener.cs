@@ -5,6 +5,7 @@ using System.Threading;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
+using vs2026_plugin.Commands;
 using vs2026_plugin.Services;
 
 namespace vs2026_plugin.Editor
@@ -137,8 +138,7 @@ namespace vs2026_plugin.Editor
                         return;
                     }
 
-                    var license = LicenseService.GetInstance();
-                    if (license.LicenseChecked && !license.IsLicenseAvailable)
+                    if (!await XygeniCommands.EnsureLicenseAsync(silent: true))
                     {
                         return;
                     }

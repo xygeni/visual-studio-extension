@@ -5,6 +5,7 @@ using Markdig;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio.PlatformUI;
+using vs2026_plugin.Commands;
 using vs2026_plugin.Models;
 using vs2026_plugin.UI.Control;
 using vs2026_plugin.UI.Window;
@@ -236,8 +237,7 @@ namespace vs2026_plugin.Services
                     }
                     else
                     {
-                        var license = LicenseService.GetInstance();
-                        if (license.LicenseChecked && !license.IsLicenseAvailable)
+                        if (!await XygeniCommands.EnsureLicenseAsync(silent: true))
                         {
                             errorMessage = "Xygeni IDE License is not available.";
                         }
@@ -347,8 +347,7 @@ namespace vs2026_plugin.Services
             {
                 try
                 {
-                    var license = LicenseService.GetInstance();
-                    if (license.LicenseChecked && !license.IsLicenseAvailable)
+                    if (!await XygeniCommands.EnsureLicenseAsync(silent: true))
                     {
                         _logger?.Log("Remediation skipped: Xygeni IDE License is not available.");
                         return;

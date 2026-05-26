@@ -217,8 +217,8 @@ namespace vs2026_plugin.UI.Control
 
         private void RunScanBtn_Click(object sender, RoutedEventArgs e)
         {
-            ThreadHelper.ThrowIfNotOnUIThread();            
-            XygeniCommands.RunScan();
+            ThreadHelper.ThrowIfNotOnUIThread();
+            _ = XygeniCommands.RunScan();
         }
 
         private void OpenOutputBtn_Click(object sender, RoutedEventArgs e)

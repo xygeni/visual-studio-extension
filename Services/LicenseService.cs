@@ -32,7 +32,7 @@ namespace vs2026_plugin.Services
         private readonly ILogger _logger;
         private readonly string _fingerprintFilePath;
         private bool _disposed;
-        private bool _isLicenseAvailable = true; // optimistic until first check
+        private bool _isLicenseAvailable = false; // fail-closed until first successful check
 
         public event EventHandler Changed;
 
