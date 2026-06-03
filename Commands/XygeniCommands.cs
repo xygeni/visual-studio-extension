@@ -116,6 +116,15 @@ namespace vs2026_plugin.Commands
         {
             if (!await EnsureLicenseAsync()) return;
 
+            // The scanner CLI Free edition rejects --incremental scans.
+            if (LicenseService.GetInstance().IsFreeLicense())
+            {
+                MessageBox.Show(
+                    "Incremental scans are not available on the Free plan. Upgrade your plan at https://xygeni.io/pricing/.",
+                    "Xygeni", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
             string rootDir = await XygeniConfigurationService.GetInstance().GetRootDirectoryAsync();
 
             if (string.IsNullOrEmpty(rootDir))

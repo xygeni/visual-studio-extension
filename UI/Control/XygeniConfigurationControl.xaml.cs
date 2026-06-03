@@ -92,6 +92,11 @@ namespace vs2026_plugin.UI.Control
         private void UpdateStatusText()
         {
             bool licensed = _licenseService.IsLicenseAvailable;
+            bool isFree = _licenseService.IsFreeLicense();
+
+            // Free plan: Auto Scan on Save relies on --incremental, which the CLI Free edition
+            // rejects. Disable the toggle and offer an upgrade link, but keep manual scans usable.
+            UpgradeMsg.Visibility = (licensed && isFree) ? Visibility.Visible : Visibility.Collapsed;
 
             if (!licensed && _licenseService.LicenseChecked)
             {
@@ -107,7 +112,7 @@ namespace vs2026_plugin.UI.Control
                 StatusTxt.Text = "installed";
                 StatusTxt.Foreground = new SolidColorBrush(Colors.Green);
                 RunScanBtn.IsEnabled = true;
-                AutoScanChk.IsEnabled = true;
+                AutoScanChk.IsEnabled = !isFree;
             }
             else if (_installerService.InstallationRunning)
             {
@@ -122,6 +127,19 @@ namespace vs2026_plugin.UI.Control
                 StatusTxt.Foreground = new SolidColorBrush(Colors.Red);
                 RunScanBtn.IsEnabled = false;
                 AutoScanChk.IsEnabled = false;
+            }
+        }
+
+        private void OpenUpgradeLink_Click(object sender, RoutedEventArgs e)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            try
+            {
+                System.Diagnostics.Process.Start("https://xygeni.io/pricing/");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to open Xygeni pricing page: {ex.Message}");
             }
         }
 

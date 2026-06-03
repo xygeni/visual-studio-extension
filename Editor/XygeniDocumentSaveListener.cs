@@ -143,6 +143,13 @@ namespace vs2026_plugin.Editor
                         return;
                     }
 
+                    // Free edition rejects --incremental; never auto-scan on save for Free.
+                    if (LicenseService.GetInstance().IsFreeLicense())
+                    {
+                        _logger.Log("Auto-scan skipped: incremental scans are not available on the Free plan.");
+                        return;
+                    }
+
                     var scanner = XygeniScannerService.GetInstance();
                     if (scanner.IsScannerRunning())
                     {

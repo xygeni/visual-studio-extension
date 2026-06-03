@@ -33,11 +33,22 @@ namespace vs2026_plugin.Services
         private readonly string _fingerprintFilePath;
         private bool _disposed;
         private bool _isLicenseAvailable = false; // fail-closed until first successful check
+        private string _licenseType; // plan type from /license/state; null = unknown (assume non-Free)
 
         public event EventHandler Changed;
 
         public bool IsLicenseAvailable => _isLicenseAvailable;
         public bool LicenseChecked { get; private set; }
+
+        /// <summary>The license plan type (e.g. "free", "enterprise"), or null when unknown.</summary>
+        public string GetLicenseType() => _licenseType;
+
+        /// <summary>
+        /// True when the installed license is a Free edition. The scanner CLI Free edition
+        /// rejects <c>--incremental</c> scans, so Auto Scan on Save must be disabled.
+        /// </summary>
+        public bool IsFreeLicense() =>
+            string.Equals(_licenseType, "free", StringComparison.OrdinalIgnoreCase);
 
         private LicenseService(ILogger logger)
         {
@@ -90,9 +101,12 @@ namespace vs2026_plugin.Services
                 if (ok)
                 {
                     _logger.Log("Xygeni IDE License is available.");
+                    // Resolve the plan type so callers can gate Free-only restrictions.
+                    await RefreshLicenseTypeAsync(apiUrl, token);
                 }
                 else
                 {
+                    _licenseType = null;
                     _logger.Log("Xygeni IDE License is NOT available.");
                 }
                 return ok;
@@ -102,6 +116,61 @@ namespace vs2026_plugin.Services
                 _logger.Error(ex, "Error validating Xygeni IDE License");
                 SetLicenseAvailable(false);
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Fetches the license plan type from <c>GET {apiUrl}/license/state</c> and caches it.
+        /// Fail-open: on any error the cached type is cleared (treated as unknown / non-Free) so
+        /// a transient failure never blocks a paying user. Raises <see cref="Changed"/> so the UI
+        /// can react. Mirrors vscode-extension LicenseStateService.refresh().
+        /// </summary>
+        public async Task RefreshLicenseTypeAsync(string apiUrl, string token)
+        {
+            string previous = _licenseType;
+            try
+            {
+                if (string.IsNullOrEmpty(apiUrl) || string.IsNullOrEmpty(token))
+                {
+                    _licenseType = null;
+                }
+                else
+                {
+                    _licenseType = await CallLicenseStateAsync(apiUrl, token);
+                    if (IsFreeLicense())
+                    {
+                        _logger.Log("Xygeni Free edition detected. Auto Scan on Save is disabled.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, "Error fetching Xygeni license state");
+                _licenseType = null;
+            }
+
+            if (!string.Equals(previous, _licenseType, StringComparison.OrdinalIgnoreCase))
+            {
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        private async Task<string> CallLicenseStateAsync(string apiUrl, string token)
+        {
+            string url = $"{apiUrl.TrimEnd('/')}/license/state";
+            using (var httpClient = CreateHttpClient())
+            using (var request = new HttpRequestMessage(HttpMethod.Get, url))
+            {
+                request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
+                var response = await httpClient.SendAsync(request);
+                if (response.StatusCode != HttpStatusCode.OK)
+                {
+                    _logger.Log($"Error response fetching Xygeni license state: {(int)response.StatusCode}");
+                    return null;
+                }
+                string body = await response.Content.ReadAsStringAsync();
+                var state = JsonConvert.DeserializeObject<LicenseState>(body);
+                return state?.DataLicensePlan?.LicenseType;
             }
         }
 
