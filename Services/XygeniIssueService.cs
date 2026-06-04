@@ -303,6 +303,8 @@ namespace vs2026_plugin.Services
                     Cwes = raw_vuln["cwes"]?.ToObject<List<string>>(),
                     Container = raw_vuln["container"]?.ToString(),
                     Language = raw_vuln["language"]?.ToString(),
+                    CodeFlows = ParseCodeFlows(raw_vuln["codeFlows"] as JArray),
+                    RawJson = raw_vuln.ToString(Formatting.None),
                     RemediableLevel = AbstractXygeniIssue.RemediableAuto
                 };
                 _issues.Add(issue);
@@ -447,6 +449,50 @@ namespace vs2026_plugin.Services
                 };
                 _issues.Add(issue);
             }
+        }
+
+        private List<CodeFlow> ParseCodeFlows(JArray rawCodeFlows)
+        {
+            var result = new List<CodeFlow>();
+            if (rawCodeFlows == null) return result;
+
+            foreach (var rawFlow in rawCodeFlows)
+            {
+                if (rawFlow == null || rawFlow.Type == JTokenType.Null) continue;
+
+                var flow = new CodeFlow
+                {
+                    Tags = rawFlow["tags"]?.ToObject<List<string>>() ?? new List<string>()
+                };
+
+                var rawFrames = rawFlow["frames"] as JArray;
+                if (rawFrames != null)
+                {
+                    foreach (var rawFrame in rawFrames)
+                    {
+                        if (rawFrame == null || rawFrame.Type == JTokenType.Null) continue;
+
+                        var location = rawFrame["location"];
+                        var frame = new CodeFlowFrame
+                        {
+                            Kind = rawFrame["kind"]?.ToString(),
+                            Container = rawFrame["container"]?.ToString(),
+                            InjectPoint = rawFrame["injectPoint"]?.ToString(),
+                            Category = rawFrame["category"]?.ToString(),
+                            FilePath = location?["filepath"]?.ToString() ?? rawFrame["filePath"]?.ToString(),
+                            BeginLine = int.TryParse((location?["beginLine"] ?? rawFrame["beginLine"])?.ToString(), out int bl) ? bl : 0,
+                            EndLine = int.TryParse((location?["endLine"] ?? rawFrame["endLine"])?.ToString(), out int el) ? el : 0,
+                            BeginColumn = int.TryParse((location?["beginColumn"] ?? rawFrame["beginColumn"])?.ToString(), out int bc) ? bc : 0,
+                            EndColumn = int.TryParse((location?["endColumn"] ?? rawFrame["endColumn"])?.ToString(), out int ec) ? ec : 0,
+                            Code = (location?["code"] ?? rawFrame["code"])?.ToString()
+                        };
+                        flow.Frames.Add(frame);
+                    }
+                }
+                result.Add(flow);
+            }
+
+            return result;
         }
 
         private List<string> GetTags(JToken tags, string remediable)

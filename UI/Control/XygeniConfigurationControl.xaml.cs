@@ -23,19 +23,32 @@ namespace vs2026_plugin.UI.Control
         private readonly XygeniConfigurationService _configurationService;
         private readonly XygeniInstallerService _installerService;
         private readonly XygeniScannerService _scannerService;
+        private readonly LicenseService _licenseService;
 
         public XygeniConfigurationControl()
         {
             InitializeComponent();
             _configurationService = XygeniConfigurationService.GetInstance();
-            
+
             _installerService = XygeniInstallerService.GetInstance();
             _installerService.Changed += OnInstallerServiceChanged;
 
             _scannerService = XygeniScannerService.GetInstance();
             _scannerService.Changed += OnScannerServiceChanged;
 
+            _licenseService = LicenseService.GetInstance();
+            _licenseService.Changed += OnLicenseServiceChanged;
+
             LoadSettings();
+        }
+
+        private void OnLicenseServiceChanged(object sender, EventArgs e)
+        {
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                UpdateStatusText();
+            });
         }
 
         private void OnInstallerServiceChanged(object sender, EventArgs e)
@@ -71,30 +84,70 @@ namespace vs2026_plugin.UI.Control
             ProxyPasswordTxt.Password = proxySettings.Password;
             ProxyNonProxyHostsTxt.Text = proxySettings.NonProxyHosts;
 
+            AutoScanChk.IsChecked = _configurationService.GetAutoScan();
+
             UpdateStatusText();
         }
 
         private void UpdateStatusText()
         {
-            
+            bool licensed = _licenseService.IsLicenseAvailable;
+            bool isFree = _licenseService.IsFreeLicense();
+
+            // Free plan: Auto Scan on Save relies on --incremental, which the CLI Free edition
+            // rejects. Disable the toggle and offer an upgrade link, but keep manual scans usable.
+            UpgradeMsg.Visibility = (licensed && isFree) ? Visibility.Visible : Visibility.Collapsed;
+
+            if (!licensed && _licenseService.LicenseChecked)
+            {
+                StatusTxt.Text = "IDE License not available";
+                StatusTxt.Foreground = new SolidColorBrush(Colors.Red);
+                RunScanBtn.IsEnabled = false;
+                AutoScanChk.IsEnabled = false;
+                return;
+            }
+
             if (_installerService.IsInstalled)
             {
                 StatusTxt.Text = "installed";
                 StatusTxt.Foreground = new SolidColorBrush(Colors.Green);
                 RunScanBtn.IsEnabled = true;
+                AutoScanChk.IsEnabled = !isFree;
             }
             else if (_installerService.InstallationRunning)
             {
                 StatusTxt.Text = "installing...";
                 StatusTxt.Foreground = new SolidColorBrush(Colors.Orange);
                 RunScanBtn.IsEnabled = false;
+                AutoScanChk.IsEnabled = false;
             }
             else
             {
                 StatusTxt.Text = "not installed";
                 StatusTxt.Foreground = new SolidColorBrush(Colors.Red);
                 RunScanBtn.IsEnabled = false;
+                AutoScanChk.IsEnabled = false;
             }
+        }
+
+        private void OpenUpgradeLink_Click(object sender, RoutedEventArgs e)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            try
+            {
+                System.Diagnostics.Process.Start("https://xygeni.io/pricing/");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to open Xygeni pricing page: {ex.Message}");
+            }
+        }
+
+        private void AutoScanChk_Changed(object sender, RoutedEventArgs e)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            if (!IsLoaded) return;
+            _configurationService.SaveAutoScan(AutoScanChk.IsChecked ?? false);
         }
 
         private void SaveBtn_Click(object sender, RoutedEventArgs e)
@@ -158,6 +211,17 @@ namespace vs2026_plugin.UI.Control
                         return;
                     }
 
+                    if (!await LicenseService.GetInstance().IsValidLicenseAsync(apiUrl, token))
+                    {
+                        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                        StatusTxt.Text = "IDE License not available";
+                        RunScanBtn.IsEnabled = false;
+                        AutoScanChk.IsEnabled = false;
+                        MessageBox.Show("No Xygeni IDE License available. Please contact your administrator for more details.",
+                            "Xygeni Configuration", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
                     await _installerService.InstallAsync(apiUrl, token);
                     await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
                 }
@@ -171,8 +235,8 @@ namespace vs2026_plugin.UI.Control
 
         private void RunScanBtn_Click(object sender, RoutedEventArgs e)
         {
-            ThreadHelper.ThrowIfNotOnUIThread();            
-            XygeniCommands.RunScan();
+            ThreadHelper.ThrowIfNotOnUIThread();
+            _ = XygeniCommands.RunScan();
         }
 
         private void OpenOutputBtn_Click(object sender, RoutedEventArgs e)

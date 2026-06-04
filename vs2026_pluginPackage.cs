@@ -5,6 +5,7 @@ using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using vs2026_plugin.Services;
+using vs2026_plugin.Editor;
 using System.IO;
 using System.Threading.Tasks;
 
@@ -48,6 +49,7 @@ namespace vs2026_plugin
 
         private IVsOutputWindowPane _outputPane;
         private XygeniErrorListService _errorListService;
+        private XygeniDocumentSaveListener _saveListener;
         public ILogger Logger { get; private set; }
 
         /// <summary>
@@ -80,15 +82,89 @@ namespace vs2026_plugin
             XygeniScannerService.GetInstance(Logger);
             XygeniIssueService.GetInstance(Logger);
             IssueDetailsService.GetInstance(this, Logger);
+            LicenseService.GetInstance(Logger);
             _errorListService = XygeniErrorListService.GetInstance(this, Logger);
             _errorListService.Refresh();
 
+            // Best-effort: if a token is already stored, register the IDE seat now.
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var config = XygeniConfigurationService.GetInstance();
+                    string url = config.GetUrl();
+                    string token = config.GetToken();
+                    if (!string.IsNullOrEmpty(token))
+                    {
+                        await LicenseService.GetInstance().IsValidLicenseAsync(url, token);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger?.Error(ex, "Initial Xygeni IDE License check failed");
+                }
+            });
+
             await Commands.XygeniSettingsCommand.InitializeAsync(this);
-            await Commands.XygeniExplorerCommand.InitializeAsync(this);            
+            await Commands.XygeniExplorerCommand.InitializeAsync(this);
+            await Commands.XygeniRunIncrementalScanCommand.InitializeAsync(this);
             Logger.Log("Xygeni Extension Initialized Successfully");
-            
+
             var initEvents = new InitEvents(this, Logger);
             initEvents.registerEvents();
+
+            // Register a Running Document Table listener so that, when the user
+            // enables auto-scan, file saves trigger a debounced incremental scan.
+            try
+            {
+                if (await GetServiceAsync(typeof(SVsRunningDocumentTable)) is IVsRunningDocumentTable rdt)
+                {
+                    _saveListener = new XygeniDocumentSaveListener(rdt, Logger);
+                    _saveListener.Advise();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Failed to register Xygeni save listener");
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && _saveListener != null)
+            {
+                try
+                {
+                    // Unadvise must run on the UI thread; if Dispose was invoked
+                    // off-UI (e.g. during finalization on shutdown), skip it —
+                    // VS will reclaim the cookie when the package is torn down.
+                    if (ThreadHelper.CheckAccess())
+                    {
+                        _saveListener.Unadvise();
+                    }
+                    _saveListener.Dispose();
+                    _saveListener = null;
+                }
+                catch (Exception ex)
+                {
+                    Logger?.Error(ex, "Failed to dispose Xygeni save listener");
+                }
+            }
+
+            if (disposing)
+            {
+                try
+                {
+                    // Best-effort release of the IDE seat (POST /ideaccess/uninstall).
+                    LicenseService.GetInstance().Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Logger?.Error(ex, "Failed to release Xygeni IDE License seat");
+                }
+            }
+
+            base.Dispose(disposing);
         }
 
         public async Task ShowOutputPaneAsync()
@@ -153,11 +229,35 @@ namespace vs2026_plugin
 
             XygeniConfigurationService.GetInstance().ClearCache();
 
-            // READ ISSUES                
+            // READ ISSUES
             XygeniIssueService.GetInstance().ReadIssuesAsync();
 
-            // Install Scanner
-            Commands.XygeniCommands.InstallScanner();
+            // Validate IDE seat (POST /internal/license/ideaccess) and only proceed
+            // with installation/scanning if the response is 200.
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var config = XygeniConfigurationService.GetInstance();
+                    string url = config.GetUrl();
+                    string token = config.GetToken();
+                    if (string.IsNullOrEmpty(token))
+                    {
+                        return;
+                    }
+                    bool licensed = await LicenseService.GetInstance().IsValidLicenseAsync(url, token);
+                    if (!licensed)
+                    {
+                        Logger?.Log("Xygeni IDE License unavailable; skipping scanner installation.");
+                        return;
+                    }
+                    await Commands.XygeniCommands.InstallScanner();
+                }
+                catch (Exception ex)
+                {
+                    Logger?.Error(ex, "Workspace-ready license/install flow failed");
+                }
+            });
 
             // Close Issue Details Window
             IssueDetailsService.GetInstance().CloseIssueDetailsWindow();

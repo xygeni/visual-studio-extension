@@ -39,6 +39,8 @@ namespace vs2026_plugin.UI.Control
     {
         private readonly XygeniIssueService _issueService;
         private readonly XygeniScannerService _scannerService;
+        private readonly LicenseService _licenseService;
+        private readonly XygeniInstallerService _installerService;
 
         private readonly XygeniExplorerViewModel _vm;
 
@@ -49,6 +51,8 @@ namespace vs2026_plugin.UI.Control
 
             _issueService = XygeniIssueService.GetInstance();
             _scannerService = XygeniScannerService.GetInstance();
+            _licenseService = LicenseService.GetInstance();
+            _installerService = XygeniInstallerService.GetInstance();
 
             _vm = new XygeniExplorerViewModel(_issueService, _scannerService);
 
@@ -57,8 +61,25 @@ namespace vs2026_plugin.UI.Control
             _vm.IssueSelected += OnIssueSelected;
             _issueService.IssuesChanged += OnIssuesChanged;
             _scannerService.Changed += OnScannerChanged;
+            _licenseService.Changed += OnLicenseOrInstallerChanged;
+            _installerService.Changed += OnLicenseOrInstallerChanged;
+
+            UpdateRunButtonEnabled();
 
             _vm.Refresh();
+        }
+
+        private async void OnLicenseOrInstallerChanged(object sender, EventArgs e)
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            UpdateRunButtonEnabled();
+        }
+
+        private void UpdateRunButtonEnabled()
+        {
+            // Block the explorer "Run Scan" button when there is no IDE seat or no installed scanner,
+            // matching the gating already enforced by EnsureLicenseAsync at runtime.
+            RunScanBtn.IsEnabled = _installerService.IsInstalled && _licenseService.IsLicenseAvailable;
         }
 
         private void SetRunButtonIcon()
@@ -89,7 +110,7 @@ namespace vs2026_plugin.UI.Control
         private void RunScanBtn_Click(object sender, RoutedEventArgs e)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
-            XygeniCommands.RunScan();
+            _ = XygeniCommands.RunScan();
         }
 
         private void ExplorerTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)

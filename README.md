@@ -1,6 +1,6 @@
 # Xygeni Security Extension for Visual Studio
 
-**Secure your codebase with Secrets, SAST, SCA, IaC & Supply Chain scanning directly within your VS Code environment.**
+**Secure your codebase with Secrets, SAST, SCA, IaC & Supply Chain scanning directly within your Visual Studio environment.**
 
 Xygeni Security Scanner is a powerful extension that brings comprehensive security scanning to your fingertips. It integrates seamlessly with your development workflow, allowing you to identify and remediate security vulnerabilities early in the process.
 
@@ -15,10 +15,11 @@ Xygeni Security Scanner is a powerful extension that brings comprehensive securi
   - **IaC (Infrastructure as Code):** Scan your IaC files (e.g., Terraform, CloudFormation) for misconfigurations.
   - **Misconfigurations:** Detect security misconfigurations in your application and services.
 - **Remediation actions for SCA and SAST Issues:** Automatically detect and provide remediation guidance for vulnerabilities found in your source code and dependencies, enabling quick fixes directly within VS Code.
+- **Incremental Scan on Save (opt-in):** When enabled, saving a file triggers a debounced incremental scan (`xygeni scan --incremental`) so you get fast feedback while you code. Disabled by default; toggle it from the Xygeni Settings panel.
 - **Seamless Integration:** The extension adds a dedicated Xygeni view to your activity bar for easy access.
 - **Guided Setup:** A simple configuration process to connect to the Xygeni service.
 - **In-Editor Issue Highlighting:** View security findings directly in your code, making it easy to pinpoint and fix issues.
-- **Detailed Vulnerability Information:** Get rich details for each identified issue, including severity, description, and remediation guidance.
+- **Detailed Vulnerability Information:** Get rich details for each identified issue, including severity, description, code snippet, and remediation guidance.
 - **Proxy Support:** Configure the extension to work with your corporate proxy.
 
 ## Installation
@@ -45,6 +46,8 @@ Xygeni Security Scanner is a powerful extension that brings comprehensive securi
 
 *   **Xygeni API URL**: The URL of the Xygeni API server.
 *   **Xygeni API Token**: The API token for authentication.
+*   **Auto-run incremental scan on save**: When checked, saving any source file in the open solution/folder triggers a debounced (1s) incremental scan in the background. Off by default. Available only after the scanner has been installed. (Require a non-free license)
+*   **Proxy**: Optional corporate proxy settings (host, port, protocol, credentials, non-proxy hosts).
 
 ## Support
 
@@ -52,4 +55,4 @@ For support, questions, or feedback, please contact us at [support@xygeni.io](ma
 
 ## License
 
-This extension is licensed under the [MIT License](https://github.com/xygeni/vscode-extension/blob/main/LICENSE).
+This extension is licensed under the [MIT License](https://github.com/xygeni/visual-studio-extension/blob/main/LICENSE).

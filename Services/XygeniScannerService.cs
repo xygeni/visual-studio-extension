@@ -33,15 +33,25 @@ namespace vs2026_plugin.Services
         // Constants
         private const int TimeoutMs = 1800000; // 30 minutes
 
-        private readonly string[] _runAnalysisArgs = { 
-            "scan", 
-            "--run=deps,secrets,misconf,iac,suspectdeps,sast", 
-            "-f", "json", 
-            "-o", XygeniCommands.ReportSuffix, 
-            "--no-upload", 
-            "--include-vulnerabilities" 
+        private readonly string[] _runAnalysisArgs = {
+            "scan",
+            "--run=deps,secrets,misconf,iac,suspectdeps,sast",
+            "-f", "json",
+            "-o", XygeniCommands.ReportSuffix,
+            "--no-upload",
+            "--include-vulnerabilities"
         };
-        
+
+        private readonly string[] _runIncrementalAnalysisArgs = {
+            "scan",
+            "--run=secrets,iac,sast,malware",
+            "--incremental",
+            "-f", "json",
+            "-o", XygeniCommands.ReportSuffix,
+            "--no-upload",
+            "--include-vulnerabilities"
+        };
+
         private readonly string[] _runRectifyScaArgs = { "util", "rectify", "--sca" };
         private readonly string[] _runRectifySastArgs = { "util", "rectify", "--sast" };
 
@@ -146,15 +156,84 @@ namespace vs2026_plugin.Services
         public async Task RunAnalysisCommandAsync(string sourceFolder, string xygeniInstallPath, ILogger logger)
         {
             // args include -d sourceFolder.
-            
+
             var args = new List<string>(_runAnalysisArgs);
             args.Add("-d");
             args.Add(sourceFolder);
-            
+
             // The output json report is saved to the metadata folder
 
             var projectMetadataFolder = await XygeniConfigurationService.GetInstance().GetMetadataFolderAsyncForProject();
-            
+
+            await CallScannerAsync(xygeniInstallPath, args, logger, projectMetadataFolder);
+        }
+
+        public async Task RunIncrementalAnalysisAsync(string sourceFolder, string xygeniScannerPath)
+        {
+            _exitCode = null;
+
+            var timestamp = DateTime.Now;
+
+            if (_scans.Count > 5)
+            {
+                _scans.RemoveAt(0);
+            }
+
+            _logger.Log("");
+            _logger.Log("=================================================");
+            _logger.Log($"  Running incremental scan on source folder: {sourceFolder}");
+
+            var currentScan = new ScanResult { Timestamp = timestamp, Status = "running", IssuesFound = null, Summary = "incremental" };
+            _scans.Add(currentScan);
+            OnChanged();
+
+            try
+            {
+                await RunIncrementalAnalysisCommandAsync(sourceFolder, xygeniScannerPath, _logger);
+
+                _logger.Log("  Incremental scanner finished");
+
+                _scans.Remove(currentScan);
+
+                var totalTime = (DateTime.Now - timestamp).TotalSeconds;
+                _scans.Add(new ScanResult
+                {
+                    Timestamp = timestamp,
+                    Status = "completed",
+                    IssuesFound = null,
+                    Summary = $"Incremental - Duration: {totalTime:F2}s"
+                });
+
+                _exitCode = 0;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error running incremental scanner");
+
+                _exitCode = 1;
+                _scans.Remove(currentScan);
+                _scans.Add(new ScanResult
+                {
+                    Timestamp = timestamp,
+                    Status = "failed",
+                    IssuesFound = null,
+                    Summary = "incremental"
+                });
+            }
+            finally
+            {
+                OnChanged();
+            }
+        }
+
+        public async Task RunIncrementalAnalysisCommandAsync(string sourceFolder, string xygeniInstallPath, ILogger logger)
+        {
+            var args = new List<string>(_runIncrementalAnalysisArgs);
+            args.Add("-d");
+            args.Add(sourceFolder);
+
+            var projectMetadataFolder = await XygeniConfigurationService.GetInstance().GetMetadataFolderAsyncForProject();
+
             await CallScannerAsync(xygeniInstallPath, args, logger, projectMetadataFolder);
         }
 
@@ -180,6 +259,35 @@ namespace vs2026_plugin.Services
             args.Add(line);
 
             await CallScannerAsync(xygeniInstallPath, args, logger, Path.GetDirectoryName(filePath));
+        }
+
+        public async Task RunAiExplainCommandAsync(string issueJson, string outputFile, string xygeniInstallPath, ILogger logger)
+        {
+            string outputDir = Path.GetDirectoryName(outputFile);
+            if (!string.IsNullOrEmpty(outputDir))
+            {
+                Directory.CreateDirectory(outputDir);
+            }
+            string inputJsonPath = Path.Combine(
+                string.IsNullOrEmpty(outputDir) ? Path.GetTempPath() : outputDir,
+                $"ai-explain-input-{Guid.NewGuid():N}.json");
+            File.WriteAllText(inputJsonPath, issueJson ?? string.Empty);
+
+            try
+            {
+                var args = new List<string>
+                {
+                    "util",
+                    "ai-explain",
+                    "--issue-json-file", inputJsonPath,
+                    "-f", outputFile
+                };
+                await CallScannerAsync(xygeniInstallPath, args, logger, Path.GetTempPath());
+            }
+            finally
+            {
+                try { File.Delete(inputJsonPath); } catch { /* best-effort cleanup */ }
+            }
         }
 
         private async Task CallScannerAsync(string xygeniInstallPath, List<string> args, ILogger logger, string workingDir)
