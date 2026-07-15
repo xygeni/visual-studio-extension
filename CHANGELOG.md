@@ -1,7 +1,11 @@
 
+## 1.0.1 (2026-07-15)
+
+- Fixed IDE license validation.
+
 ## 1.0.0 (2026-06-11)
 
-- Added IDE license validation: the extension now registers a machine fingerprint against the Xygeni `internal/license/ideaccess` endpoint and releases the seat on shutdown. Scanning, AI Explain and the Run Scan / Auto-scan controls require a valid seat.
+- Added IDE license validation.
 - Gated Auto Scan on Save behind a non-Free license; Free-tier users can still run manual scans.
 
 
