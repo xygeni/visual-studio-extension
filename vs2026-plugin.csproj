@@ -58,7 +58,6 @@
     <Compile Include="UI\Control\XygeniExplorerViewModel.cs" />
     <Compile Include="Commands\XygeniSettingsCommand.cs" />
     <Compile Include="Commands\XygeniExplorerCommand.cs" />
-    <Compile Include="Commands\XygeniRunIncrementalScanCommand.cs" />
     <Compile Include="Commands\XygeniCommands.cs" />
     <Compile Include="Services\XygeniConfigurationService.cs" />
     <Compile Include="Services\XygeniInstallerService.cs" />

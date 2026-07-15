@@ -107,7 +107,6 @@ namespace vs2026_plugin
 
             await Commands.XygeniSettingsCommand.InitializeAsync(this);
             await Commands.XygeniExplorerCommand.InitializeAsync(this);
-            await Commands.XygeniRunIncrementalScanCommand.InitializeAsync(this);
             Logger.Log("Xygeni Extension Initialized Successfully");
 
             var initEvents = new InitEvents(this, Logger);

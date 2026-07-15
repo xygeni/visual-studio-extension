@@ -29,13 +29,6 @@
           <ButtonText>Xygeni Explorer</ButtonText>
         </Strings>
       </Button>
-      <Button guid="guidXygeniCommandPackageCmdSet" id="XygeniRunIncrementalScanCommandId" priority="0x0200" type="Button">
-        <Parent guid="guidXygeniCommandPackageCmdSet" id="XygeniSettingsGroupID" />
-        <Strings>
-          <ButtonText>Run Xygeni Incremental Scan</ButtonText>
-          <CommandName>Run Xygeni Incremental Scan</CommandName>
-        </Strings>
-      </Button>
     </Buttons>
     <Bitmaps>
       <Bitmap guid="XygeniIcon" href="UI\Resources\xy_icon16.png" usedList="XygeniIconID" />
@@ -50,7 +43,6 @@
       <IDSymbol name="XygeniSettingsGroupID" value="0x1020" />
       <IDSymbol name="XygeniSettingsCommandId" value="0x0100" />
       <IDSymbol name="XygeniExplorerCommandId" value="0x0101" />
-      <IDSymbol name="XygeniRunIncrementalScanCommandId" value="0x0102" />
     </GuidSymbol>
 
     <GuidSymbol name="XygeniIcon" value="{f9b5f3d3-1b2c-4e8b-8a8b-3e4b5c6d7e9f}">
