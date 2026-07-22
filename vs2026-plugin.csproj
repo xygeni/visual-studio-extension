@@ -79,6 +79,7 @@
     <Compile Include="Models\CodeFlowFrame.cs" />
     <Compile Include="Models\SecretsXygeniIssue.cs" />
     <Compile Include="Models\VulnXygeniIssue.cs" />
+    <Compile Include="Models\QualityXygeniIssue.cs" />
     <Compile Include="Services\IssueDetailsService.cs" />
     <Compile Include="Services\CodeFlowScripts.cs" />
     <Compile Include="Services\AIExplainService.cs" />
