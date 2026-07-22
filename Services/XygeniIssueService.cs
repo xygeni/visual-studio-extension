@@ -135,6 +135,7 @@ namespace vs2026_plugin.Services
                 await ReadSecretsReportAsync(Path.Combine(workingDir, $"secrets.{suffix}"));
                 await ReadMisconfReportAsync(Path.Combine(workingDir, $"misconf.{suffix}"));
                 await ReadSastReportAsync(Path.Combine(workingDir, $"sast.{suffix}"));
+                await ReadQualityReportAsync(Path.Combine(workingDir, $"quality.{suffix}"));
                 await ReadIacReportAsync(Path.Combine(workingDir, $"iac.{suffix}"));
                 await ReadDepsReportAsync(Path.Combine(workingDir, $"deps.{suffix}"));
 
@@ -178,6 +179,23 @@ namespace vs2026_plugin.Services
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error reading sast output:");
+                throw;
+            }
+        }
+
+        public async Task ReadQualityReportAsync(string filename)
+        {
+            if (!File.Exists(filename)) return;
+
+            try
+            {
+                string data = File.ReadAllText(filename);
+                var rawData = JsonConvert.DeserializeObject<JObject>(data);
+                ProcessQualityReport(rawData);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error reading quality output:");
                 throw;
             }
         }
@@ -305,6 +323,55 @@ namespace vs2026_plugin.Services
                     Language = raw_vuln["language"]?.ToString(),
                     CodeFlows = ParseCodeFlows(raw_vuln["codeFlows"] as JArray),
                     RawJson = raw_vuln.ToString(Formatting.None),
+                    RemediableLevel = AbstractXygeniIssue.RemediableAuto
+                };
+                _issues.Add(issue);
+            }
+        }
+
+        private void ProcessQualityReport(JObject jsonRaw)
+        {
+            // Top-level key CONFIRMED against a real quality.<suffix> report: Code Quality reuses
+            // the SAST scanner infra, so findings live under `vulnerabilities` (narrow `qualityIssues`
+            // fallback only, for forward-compat). See PR #45 and the fixture-backed tests in the
+            // sibling plugins (vscode/intellij).
+            var quality_items = jsonRaw["vulnerabilities"] as JArray
+                ?? jsonRaw["qualityIssues"] as JArray
+                ?? new JArray();
+            string tool = jsonRaw["metadata"]?["reportProperties"]?["tool.name"]?.ToString();
+
+            foreach (var raw in quality_items)
+            {
+                if (raw == null || raw.Type == JTokenType.Null) continue;
+
+                var issue = new QualityXygeniIssue
+                {
+                    Id = raw["issueId"]?.ToString(),
+                    Type = raw["kind"]?.ToString() ?? raw["type"]?.ToString() ?? raw["ruleId"]?.ToString(),
+                    Detector = raw["detector"]?.ToString(),
+                    Tool = tool,
+                    Kind = "quality_issue",
+                    Severity = raw["severity"]?.ToString() ?? "info",
+                    Confidence = raw["confidence"]?.ToString() ?? "high",
+                    Category = "quality",
+                    CategoryName = "Code Quality",
+                    // Real reports carry the quality dimension in `kind` (e.g. "reliability",
+                    // "maintainability"); `category`/`properties.category` are only present in
+                    // older/other shapes → keep them as the preferred fallbacks (PR #45 fix).
+                    QualityCategory = raw["category"]?.ToString()
+                        ?? raw["properties"]?["category"]?.ToString()
+                        ?? raw["kind"]?.ToString(),
+                    File = raw["location"]?["filepath"]?.ToString(),
+                    BeginLine = int.TryParse(raw["location"]?["beginLine"]?.ToString(), out int bl) ? bl : 0,
+                    EndLine = int.TryParse(raw["location"]?["endLine"]?.ToString(), out int el) ? el : 0,
+                    BeginColumn = int.TryParse(raw["location"]?["beginColumn"]?.ToString(), out int bc) ? bc : 0,
+                    EndColumn = int.TryParse(raw["location"]?["endColumn"]?.ToString(), out int ec) ? ec : 0,
+                    Code = raw["location"]?["code"]?.ToString(),
+                    Explanation = raw["explanation"]?.ToString() ?? raw["message"]?.ToString(),
+                    Url = raw["url"]?.ToString(),
+                    Tags = raw["tags"]?.ToObject<List<string>>(),
+                    Branch = jsonRaw["currentBranch"]?.ToString(),
+                    Language = raw["language"]?.ToString(),
                     RemediableLevel = AbstractXygeniIssue.RemediableAuto
                 };
                 _issues.Add(issue);

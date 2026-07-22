@@ -49,6 +49,8 @@ namespace vs2026_plugin.Services
             {
                 case "code_vulnerability":
                     return await PreviewDiffSastRemediationAsync(issueId, fileUri, xygeniInstallPath);
+                case "quality_issue":
+                    return await PreviewDiffQualityRemediationAsync(issueId, fileUri, xygeniInstallPath);
                 case "sca_vulnerability":
                     return await PreviewDiffScaRemediationAsync(issueId, fileUri, xygeniInstallPath);
                 case "secret":
@@ -104,7 +106,61 @@ namespace vs2026_plugin.Services
                 var scanner = XygeniScannerService.GetInstance();
                 await scanner.RunRectifySastCommandAsync(tempFile, issue.Detector, issue.BeginLine.ToString(), xygeniInstallPath, _logger);
 
-                // Return fix data            
+                // Return fix data
+                const string explanation = "No explanation available";
+                return new FixData { IssueTitle = issue.Type, TempFile = tempFile, Explanation = explanation };
+            }
+            catch (Exception ex)
+            {
+                _logger.Log($"Error applying remediation: {ex.Message}");
+                throw;
+            }
+        }
+
+        private async Task<FixData> PreviewDiffQualityRemediationAsync(string issueId, string fileUri, string xygeniInstallPath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(issueId)) return new FixData { IssueTitle = "", TempFile = null, Explanation = null };
+
+                var issueService = XygeniIssueService.GetInstance();
+                var issue = issueService.FindIssueById(issueId);
+                if (issue == null)
+                {
+                    _logger.Log($"Issue not found: {issueId}");
+                    throw new Exception($"Issue not found: {issueId}");
+                }
+
+                // Ensure file path is absolute
+                string absoluteFileUri = fileUri;
+                if (!Path.IsPathRooted(absoluteFileUri))
+                {
+                    string rootDir = await XygeniConfigurationService.GetInstance().GetRootDirectoryAsync();
+                    if (!string.IsNullOrEmpty(rootDir))
+                    {
+                        absoluteFileUri = Path.Combine(rootDir, absoluteFileUri);
+                    }
+                }
+
+                if (!File.Exists(absoluteFileUri))
+                {
+                    _logger.Log($"File not found: {absoluteFileUri}");
+                    throw new FileNotFoundException($"File not found: {absoluteFileUri}");
+                }
+
+                // Generate temp folder and copy file
+                string tempDir = Path.Combine(Path.GetTempPath(), "xygeni_rem_" + Guid.NewGuid().ToString().Substring(0, 8));
+                Directory.CreateDirectory(tempDir);
+
+                string fileName = Path.GetFileName(absoluteFileUri);
+                string tempFile = Path.Combine(tempDir, fileName);
+                File.Copy(absoluteFileUri, tempFile);
+
+                // Call scanner (Code Quality fix via 'util rectify --quality')
+                var scanner = XygeniScannerService.GetInstance();
+                await scanner.RunRectifyQualityCommandAsync(tempFile, issue.Detector, issue.BeginLine.ToString(), xygeniInstallPath, _logger);
+
+                // Return fix data
                 const string explanation = "No explanation available";
                 return new FixData { IssueTitle = issue.Type, TempFile = tempFile, Explanation = explanation };
             }
