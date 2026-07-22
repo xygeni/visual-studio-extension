@@ -171,6 +171,11 @@
       <BuildAction>Content</BuildAction>
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
+    <Content Include="media\icons\code-quality.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <BuildAction>Content</BuildAction>
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
     <Content Include="media\icons\open-source.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <BuildAction>Content</BuildAction>

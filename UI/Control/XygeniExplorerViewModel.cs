@@ -129,6 +129,10 @@ namespace vs2026_plugin.UI.Control
             {
                 iconFileName = "code-sec.png";
             }
+            else if (lowerCategory.Contains("quality"))
+            {
+                iconFileName = "code-quality.png";
+            }
             else if (lowerCategory.Contains("secret"))
             {
                 iconFileName = "secrets.png";

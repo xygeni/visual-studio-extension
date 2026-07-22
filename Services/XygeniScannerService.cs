@@ -35,7 +35,7 @@ namespace vs2026_plugin.Services
 
         private readonly string[] _runAnalysisArgs = {
             "scan",
-            "--run=deps,secrets,misconf,iac,suspectdeps,sast",
+            "--run=deps,secrets,misconf,iac,suspectdeps,sast,quality",
             "-f", "json",
             "-o", XygeniCommands.ReportSuffix,
             "--no-upload",
@@ -54,6 +54,7 @@ namespace vs2026_plugin.Services
 
         private readonly string[] _runRectifyScaArgs = { "util", "rectify", "--sca" };
         private readonly string[] _runRectifySastArgs = { "util", "rectify", "--sast" };
+        private readonly string[] _runRectifyQualityArgs = { "util", "rectify", "--quality" };
 
         // State
         private bool _scannerRunning = false;
@@ -251,6 +252,19 @@ namespace vs2026_plugin.Services
         public async Task RunRectifySastCommandAsync(string filePath, string detector, string line, string xygeniInstallPath, ILogger logger)
         {
             var args = new List<string>(_runRectifySastArgs);
+            args.Add("--file-path");
+            args.Add(filePath);
+            args.Add("--detector");
+            args.Add(detector);
+            args.Add("--line");
+            args.Add(line);
+
+            await CallScannerAsync(xygeniInstallPath, args, logger, Path.GetDirectoryName(filePath));
+        }
+
+        public async Task RunRectifyQualityCommandAsync(string filePath, string detector, string line, string xygeniInstallPath, ILogger logger)
+        {
+            var args = new List<string>(_runRectifyQualityArgs);
             args.Add("--file-path");
             args.Add(filePath);
             args.Add("--detector");
