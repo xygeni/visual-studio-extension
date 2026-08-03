@@ -112,38 +112,5 @@ namespace vs2026_plugin.Commands
             return true;
         }
 
-        public static async Task RunIncrementalScanAsync()
-        {
-            if (!await EnsureLicenseAsync()) return;
-
-            // The scanner CLI Free edition rejects --incremental scans.
-            if (LicenseService.GetInstance().IsFreeLicense())
-            {
-                MessageBox.Show(
-                    "Incremental scans are not available on the Free plan. Upgrade your plan at https://xygeni.io/pricing/.",
-                    "Xygeni", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-
-            string rootDir = await XygeniConfigurationService.GetInstance().GetRootDirectoryAsync();
-
-            if (string.IsNullOrEmpty(rootDir))
-            {
-                MessageBox.Show("Please open a solution or project first.", "Xygeni Explorer", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            string scannerPath = XygeniInstallerService.GetInstance().GetScannerInstallationDir();
-            if (string.IsNullOrEmpty(scannerPath) || !XygeniInstallerService.GetInstance().IsInstalled)
-            {
-                MessageBox.Show("Xygeni Scanner is not installed. Please configure it in Xygeni Settings.", "Xygeni Explorer", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            vs2026_pluginPackage.Instance?.Logger?.Show();
-
-            await XygeniScannerService.GetInstance().RunIncrementalAnalysisAsync(rootDir, scannerPath);
-        }
-
     }
 }

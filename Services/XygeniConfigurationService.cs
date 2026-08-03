@@ -192,7 +192,7 @@ namespace vs2026_plugin.Services
 
         // resolve project name
         public async Task<string> GetProjectName() {
-            if (_projectName != null) {
+            if (!string.IsNullOrEmpty(_projectName)) {
                 return _projectName;
             }
 
@@ -207,14 +207,24 @@ namespace vs2026_plugin.Services
                 return _projectName;
             }
             
-            _projectName = projects.Item(1)?.Name ?? "unknown";
+            // While the solution is still loading there may be no projects yet:
+            // fall back to "unknown" but never cache it.
+            var projectName = projects.Count > 0 ? projects.Item(1)?.Name : null;
+            if (string.IsNullOrEmpty(projectName))
+            {
+                return "unknown";
+            }
+
+            _projectName = projectName;
             return _projectName;
         }
 
         // resolve Source path
         public async Task<string> GetRootDirectoryAsync()
         {
-            if (_rootDirectory != null) {
+            // An empty result means the solution was not loaded yet: never cache it,
+            // or every later call would keep returning "" after the solution opens.
+            if (!string.IsNullOrEmpty(_rootDirectory)) {
                 return _rootDirectory;
             }
 
@@ -287,14 +297,12 @@ namespace vs2026_plugin.Services
 
                     if (!string.IsNullOrEmpty(projectRoot))
                     {
-                        projectRoot = projectRoot.TrimEnd(Path.DirectorySeparatorChar);
-
-                        solutionPath = Path.GetFileName(projectRoot);
+                        solutionPath = projectRoot.TrimEnd(Path.DirectorySeparatorChar);
                     }
                 }
             }
 
-            _rootDirectory = solutionPath;
+            _rootDirectory = string.IsNullOrEmpty(solutionPath) ? null : solutionPath;
             return solutionPath;
         }
 
@@ -317,7 +325,9 @@ namespace vs2026_plugin.Services
                 return null;
             }
 
-            if (projectDirs.All(dir => dir.StartsWith(rootDir)))
+            // Windows paths: DTE may report drive letters / segments with different
+            // casing than the solution path, so compare case-insensitively.
+            if (projectDirs.All(dir => dir.StartsWith(rootDir, StringComparison.OrdinalIgnoreCase)))
             {
                 return rootDir;
             }

@@ -58,7 +58,6 @@
     <Compile Include="UI\Control\XygeniExplorerViewModel.cs" />
     <Compile Include="Commands\XygeniSettingsCommand.cs" />
     <Compile Include="Commands\XygeniExplorerCommand.cs" />
-    <Compile Include="Commands\XygeniRunIncrementalScanCommand.cs" />
     <Compile Include="Commands\XygeniCommands.cs" />
     <Compile Include="Services\XygeniConfigurationService.cs" />
     <Compile Include="Services\XygeniInstallerService.cs" />
@@ -79,6 +78,7 @@
     <Compile Include="Models\CodeFlowFrame.cs" />
     <Compile Include="Models\SecretsXygeniIssue.cs" />
     <Compile Include="Models\VulnXygeniIssue.cs" />
+    <Compile Include="Models\QualityXygeniIssue.cs" />
     <Compile Include="Services\IssueDetailsService.cs" />
     <Compile Include="Services\CodeFlowScripts.cs" />
     <Compile Include="Services\AIExplainService.cs" />
@@ -167,6 +167,11 @@
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
     <Content Include="media\icons\code-sec.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <BuildAction>Content</BuildAction>
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
+    <Content Include="media\icons\code-quality.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <BuildAction>Content</BuildAction>
       <IncludeInVSIX>true</IncludeInVSIX>

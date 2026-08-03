@@ -19,7 +19,8 @@ namespace vs2026_plugin.Services
     ///     SHA-256(hostname | primaryMac | platform | arch) and persists it under
     ///     LocalApplicationData\.xygenidata\fingerprint.dat.
     ///   - POSTs the fingerprint object to /internal/license/ideaccess with a Bearer
-    ///     token. HTTP 200 means the IDE seat is allowed; anything else gates features.
+    ///     token. A 200 whose body is "true" grants the seat; a "false" body (also 200)
+    ///     or any non-200 gates features.
     ///   - On Dispose releases the seat via /internal/license/ideaccess/uninstall.
     /// </summary>
     public class LicenseService : IDisposable
@@ -321,8 +322,18 @@ namespace vs2026_plugin.Services
                 if (response.StatusCode != HttpStatusCode.OK)
                 {
                     _logger.Log($"Error response installing Xygeni IDE License: {(int)response.StatusCode}");
+                    return false;
                 }
-                return response.StatusCode == HttpStatusCode.OK;
+                // The endpoint returns a JSON boolean: "true" grants the IDE seat, "false" denies
+                // it (e.g. no seats available). A 200 status alone does NOT mean the seat is valid,
+                // so the response body must be read.
+                string body = (await response.Content.ReadAsStringAsync())?.Trim();
+                bool granted = string.Equals(body, "true", StringComparison.OrdinalIgnoreCase);
+                if (!granted)
+                {
+                    _logger.Log("Xygeni IDE License denied: no seat available for this account.");
+                }
+                return granted;
             }
         }
 
