@@ -310,6 +310,11 @@ namespace vs2026_plugin
         }
 
         public int OnAfterOpenSolution(object pUnkReserved, int fNewSolution) {
+            // Classic .sln opens only fire this event: OnAfterLoadAllDeferredProjects
+            // never fires for non-deferred loads, so without this call the caches
+            // poisoned at package init (empty root directory) were never cleared.
+            ThreadHelper.ThrowIfNotOnUIThread();
+            _package.OnWorkspaceReady();
             return VSConstants.S_OK;
         }
 

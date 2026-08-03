@@ -2,6 +2,7 @@
 ## 1.0.1 (2026-07-15)
 
 - Fixed IDE license validation.
+- Fixed "Please open a solution or project first" error when scanning with a solution open: the workspace root resolved before the solution finished loading was cached forever, and classic `.sln` opens never refreshed it (issues stored for the project were not reloaded either).
 
 ## 1.0.0 (2026-06-11)
 
