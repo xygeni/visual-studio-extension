@@ -134,12 +134,24 @@ namespace vs2026_plugin.UI.Control
 
             var clickedContainer = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
             if (clickedContainer?.DataContext is TreeNodeData nodeData &&
-                nodeData.Tag is IXygeniIssue)
+                nodeData.Tag is IXygeniIssue issue)
             {
+                bool alreadySelected = clickedContainer.IsSelected;
+
                 // Force issue-row selection to avoid the category container keeping selection.
                 clickedContainer.IsSelected = true;
                 clickedContainer.Focus();
                 e.Handled = true;
+
+                // #1472: re-clicking the ALREADY-selected issue does not raise
+                // SelectedItemChanged, so the details tab would not reopen (e.g. after
+                // the user closed it). Trigger the details explicitly in that case.
+                // When the selection actually changes, SelectedItemChanged handles it,
+                // so we must NOT also fire here (avoids opening the tab twice).
+                if (alreadySelected)
+                {
+                    OnIssueSelected(issue);
+                }
             }
         }
 
