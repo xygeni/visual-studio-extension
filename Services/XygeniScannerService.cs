@@ -33,14 +33,9 @@ namespace vs2026_plugin.Services
         // Constants
         private const int TimeoutMs = 1800000; // 30 minutes
 
-        // Single source of truth for the scan set so full and incremental scans
-        // never drift (#1473). Both modes run the SAME complete set; incremental
-        // only adds the `--incremental` flag.
-        private const string RunArg = "--run=deps,secrets,misconf,iac,suspectdeps,sast,malware,quality";
-
         private readonly string[] _runAnalysisArgs = {
             "scan",
-            RunArg,
+            "--run=deps,secrets,misconf,iac,suspectdeps,sast,quality",
             "-f", "json",
             "-o", XygeniCommands.ReportSuffix,
             "--no-upload",
@@ -49,7 +44,7 @@ namespace vs2026_plugin.Services
 
         private readonly string[] _runIncrementalAnalysisArgs = {
             "scan",
-            RunArg,
+            "--run=secrets,iac,sast,malware",
             "--incremental",
             "-f", "json",
             "-o", XygeniCommands.ReportSuffix,
