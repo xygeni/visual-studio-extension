@@ -56,6 +56,8 @@ namespace vs2026_plugin.Services
                 case "secret":
                 case "misconfiguration":
                 case "iac_flaw":
+                case "api_flaw":
+                case "ia_vulnerability":
                     _logger.Log($"Remediation preview not supported for {kind}");
                     return new FixData { IssueTitle = "", TempFile = null, Explanation = null };
                 default:

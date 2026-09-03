@@ -138,6 +138,8 @@ namespace vs2026_plugin.Services
                 await ReadQualityReportAsync(Path.Combine(workingDir, $"quality.{suffix}"));
                 await ReadIacReportAsync(Path.Combine(workingDir, $"iac.{suffix}"));
                 await ReadDepsReportAsync(Path.Combine(workingDir, $"deps.{suffix}"));
+                await ReadApisecReportAsync(Path.Combine(workingDir, $"apisec.{suffix}"));
+                await ReadAiReportAsync(Path.Combine(workingDir, $"ai.{suffix}"));
 
                 // Sort issues by severity
                 _issues = _issues.OrderBy(i => i.GetSeverityLevel()).ToList();
@@ -230,6 +232,40 @@ namespace vs2026_plugin.Services
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error reading deps output:");
+                throw;
+            }
+        }
+
+        public async Task ReadApisecReportAsync(string filename)
+        {
+            if (!File.Exists(filename)) return;
+
+            try
+            {
+                string data = File.ReadAllText(filename);
+                var rawData = JsonConvert.DeserializeObject<JObject>(data);
+                ProcessApisecReport(rawData);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error reading apisec output:");
+                throw;
+            }
+        }
+
+        public async Task ReadAiReportAsync(string filename)
+        {
+            if (!File.Exists(filename)) return;
+
+            try
+            {
+                string data = File.ReadAllText(filename);
+                var rawData = JsonConvert.DeserializeObject<JObject>(data);
+                ProcessAiReport(rawData);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error reading ai output:");
                 throw;
             }
         }
@@ -516,6 +552,114 @@ namespace vs2026_plugin.Services
                 };
                 _issues.Add(issue);
             }
+        }
+
+        private void ProcessApisecReport(JObject jsonRaw)
+        {
+            // Findings live under `flaws`; the sibling `services` / `dataObjects` arrays are the
+            // discovered API inventory, not findings. Flaws scoped to a module or a service carry
+            // no `location`, so the positional fields stay at their defaults and the issue is kept.
+            var flaws = jsonRaw["flaws"] as JArray ?? new JArray();
+            string tool = jsonRaw["metadata"]?["reportProperties"]?["tool.name"]?.ToString();
+
+            foreach (var flaw in flaws)
+            {
+                if (flaw == null || flaw.Type == JTokenType.Null) continue;
+
+                var location = flaw["location"];
+                var issue = new ApisecXygeniIssue
+                {
+                    Id = flaw["issueId"]?.ToString(),
+                    // `title` is the human label, `flawType` the machine type: prefer the label.
+                    Type = flaw["title"]?.ToString() ?? flaw["flawType"]?.ToString() ?? "",
+                    Detector = flaw["detector"]?.ToString(),
+                    Tool = tool,
+                    Kind = "api_flaw",
+                    Severity = flaw["severity"]?.ToString() ?? "info",
+                    Confidence = flaw["confidence"]?.ToString() ?? "high",
+                    Category = "apisec",
+                    CategoryName = "API Security",
+                    File = location?["filepath"]?.ToString() ?? "",
+                    BeginLine = int.TryParse(location?["beginLine"]?.ToString(), out int bl) ? bl : 0,
+                    EndLine = int.TryParse(location?["endLine"]?.ToString(), out int el) ? el : 0,
+                    BeginColumn = int.TryParse(location?["beginColumn"]?.ToString(), out int bc) ? bc : 0,
+                    EndColumn = int.TryParse(location?["endColumn"]?.ToString(), out int ec) ? ec : 0,
+                    Code = location?["code"]?.ToString() ?? "",
+                    Explanation = flaw["explanation"]?.ToString() ?? "",
+                    Url = flaw["url"]?.ToString() ?? "",
+                    Tags = flaw["tags"]?.ToObject<List<string>>() ?? new List<string>(),
+                    Branch = jsonRaw["currentBranch"]?.ToString(),
+                    EndpointMethod = flaw["endpointMethod"]?.ToString(),
+                    EndpointPath = flaw["endpointPath"]?.ToString(),
+                    ModuleName = flaw["moduleName"]?.ToString(),
+                    ServiceName = flaw["serviceName"]?.ToString(),
+                    OwaspApiTop10 = flaw["owaspApiTop10"]?.ToObject<List<string>>(),
+                    Cwes = flaw["cwes"]?.ToObject<List<string>>(),
+                    Remediation = flaw["remediation"]?.ToString(),
+                    RemediableLevel = "none"
+                };
+                _issues.Add(issue);
+            }
+        }
+
+        private void ProcessAiReport(JObject jsonRaw)
+        {
+            // The AI report does not reuse the SAST field names: severity is `severityFloor`, the
+            // id is `id`, the detector `detectorId` and the explanation `description`. There is no
+            // kind/type either, so the detector id doubles as the finding's label.
+            var vulnerabilities = jsonRaw["vulnerabilities"] as JArray ?? new JArray();
+            string tool = jsonRaw["metadata"]?["reportProperties"]?["tool.name"]?.ToString();
+
+            foreach (var vulnerability in vulnerabilities)
+            {
+                if (vulnerability == null || vulnerability.Type == JTokenType.Null) continue;
+
+                var location = vulnerability["location"];
+                string detectorId = vulnerability["detectorId"]?.ToString() ?? "";
+                var issue = new AiXygeniIssue
+                {
+                    Id = vulnerability["id"]?.ToString(),
+                    Type = detectorId,
+                    Detector = detectorId,
+                    Tool = tool,
+                    Kind = "ia_vulnerability",
+                    Severity = vulnerability["severityFloor"]?.ToString() ?? "info",
+                    Confidence = vulnerability["confidence"]?.ToString() ?? "high",
+                    Category = "ai",
+                    CategoryName = "AI Security",
+                    File = location?["filepath"]?.ToString() ?? "",
+                    BeginLine = int.TryParse(location?["beginLine"]?.ToString(), out int bl) ? bl : 0,
+                    EndLine = int.TryParse(location?["endLine"]?.ToString(), out int el) ? el : 0,
+                    BeginColumn = int.TryParse(location?["beginColumn"]?.ToString(), out int bc) ? bc : 0,
+                    EndColumn = int.TryParse(location?["endColumn"]?.ToString(), out int ec) ? ec : 0,
+                    Code = location?["code"]?.ToString() ?? "",
+                    Explanation = vulnerability["description"]?.ToString() ?? "",
+                    Url = vulnerability["url"]?.ToString() ?? "",
+                    Tags = vulnerability["tags"]?.ToObject<List<string>>() ?? new List<string>(),
+                    Branch = jsonRaw["currentBranch"]?.ToString(),
+                    AssetKind = vulnerability["assetKind"]?.ToString(),
+                    Standards = GetStandardControlIds(vulnerability["standards"] as JArray),
+                    RedTeamVectors = vulnerability["redTeamVectors"]?.ToObject<List<string>>(),
+                    RemediationHint = vulnerability["remediationHint"]?.ToString(),
+                    RemediableLevel = "none"
+                };
+                _issues.Add(issue);
+            }
+        }
+
+        // `standards` is a list of {standard, version, controlId}; the control id (LLM01, ASI05...)
+        // is what reads well in the detail panel.
+        private List<string> GetStandardControlIds(JArray standards)
+        {
+            var controlIds = new List<string>();
+            if (standards == null) return controlIds;
+
+            foreach (var standard in standards)
+            {
+                string controlId = standard?["controlId"]?.ToString() ?? standard?["std"]?.ToString();
+                if (!string.IsNullOrEmpty(controlId)) controlIds.Add(controlId);
+            }
+            return controlIds;
         }
 
         private List<CodeFlow> ParseCodeFlows(JArray rawCodeFlows)

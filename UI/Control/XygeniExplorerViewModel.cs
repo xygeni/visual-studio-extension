@@ -91,8 +91,12 @@ namespace vs2026_plugin.UI.Control
 
                     foreach (var issue in group.OrderBy(i => i.GetSeverityLevel()))
                     {
+                        // API flaws scoped to a module/service have no location: skip the "file:line" suffix.
+                        string locationSuffix = string.IsNullOrEmpty(issue.File)
+                            ? ""
+                            : $" - {Path.GetFileName(issue.File)}:{issue.BeginLine}";
                         var issueNodeData = new TreeNodeData(
-                            $"[{issue.Severity}] {issue.Type} - {Path.GetFileName(issue.File)}:{issue.BeginLine}",
+                            $"[{issue.Severity}] {issue.Type}{locationSuffix}",
                             GetSeverityIcon(issue.Severity),
                             issue
                         );
@@ -125,7 +129,15 @@ namespace vs2026_plugin.UI.Control
             string iconFileName = null;
             string lowerCategory = categoryName.ToLower();
 
-            if ( lowerCategory.Contains("sast"))
+            if (lowerCategory.Contains("api security"))
+            {
+                iconFileName = "api-security.png";
+            }
+            else if (lowerCategory.Contains("ai security"))
+            {
+                iconFileName = "ai-security.png";
+            }
+            else if ( lowerCategory.Contains("sast"))
             {
                 iconFileName = "code-sec.png";
             }
