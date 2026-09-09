@@ -1,5 +1,5 @@
 
-## 1.0.3 (2026-09-03)
+## 1.0.3 (2026-09-09)
 
 - Added API Security scan: API flaws are listed under "API Security" in the Xygeni explorer, with endpoint, module, service, OWASP API Top 10 and CWE details (xygeni/xygeni-product-backlog#1691).
 - Added AI Security scan: AI findings are listed under "AI Security", with the AI asset kind, the standards they map to (OWASP LLM / ASI Top 10) and their red-team vectors (xygeni/xygeni-product-backlog#1692).
