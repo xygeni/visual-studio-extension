@@ -809,6 +809,10 @@ namespace vs2026_plugin.Services
                string severityClass = $"severity-{issue.Severity?.ToLower() ?? "info"}";
                string explanationText = issue.Explanation ?? string.Empty;
                string explanation = explanationText.Length > 30 ? explanationText.Substring(0, 30) + "..." : explanationText;
+               // API flaws scoped to a module/service have no location: no file link to offer.
+               string fileLink = string.IsNullOrEmpty(issue.File)
+                   ? string.Empty
+                   : $"<div class='file-link' onclick='openFile()'>{issue.File}:{issue.BeginLine}</div>";
                
                // Construct HTML
                return $@"
@@ -848,9 +852,7 @@ namespace vs2026_plugin.Services
                         <div class='subtitle'>
                            {issue.GetSubtitleLineHtml()}
                         </div>
-                        <div class='file-link' onclick='openFile()'>
-                            {issue.File}:{issue.BeginLine}
-                        </div>
+                        {fileLink}
                     </div>
                     
                     <div class='tabs'>
