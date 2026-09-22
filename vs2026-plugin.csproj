@@ -78,6 +78,7 @@
     <Compile Include="Models\CodeFlowFrame.cs" />
     <Compile Include="Models\SecretsXygeniIssue.cs" />
     <Compile Include="Models\VulnXygeniIssue.cs" />
+    <Compile Include="Models\SingleLocationXygeniIssue.cs" />
     <Compile Include="Models\QualityXygeniIssue.cs" />
     <Compile Include="Models\ApisecXygeniIssue.cs" />
     <Compile Include="Models\AiXygeniIssue.cs" />
