@@ -27,6 +27,11 @@ namespace vs2026_plugin.Services
         private const string ProxyPasswordKey = "ProxyPassword";
         private const string ProxyNonProxyHostsKey = "ProxyNonProxyHosts";
         private const string AutoScanKey = "AutoScan";
+        // Scanner global options, placed before the command: xygeni <options> scan ... (xygeni/tech-support#378)
+        private const string SkipSslVerifyKey = "ScannerSkipSslVerify";
+        private const string SkipUpdateKey = "ScannerSkipUpdate";
+        private const string VerboseKey = "ScannerVerbose";
+        private const string AdditionalGlobalOptionsKey = "ScannerAdditionalGlobalOptions";
         private const string MetadataFolderKey = ".xygenidata";
 
         private readonly SettingsManager _settingsManager;
@@ -145,6 +150,44 @@ namespace vs2026_plugin.Services
         {
             var store = GetWritableStore();
             store.SetBoolean(CollectionPath, AutoScanKey, autoScan);
+        }
+
+        public bool GetSkipSslVerify() { return GetBoolean(SkipSslVerifyKey); }
+        public void SaveSkipSslVerify(bool value) { GetWritableStore().SetBoolean(CollectionPath, SkipSslVerifyKey, value); }
+
+        public bool GetSkipUpdate() { return GetBoolean(SkipUpdateKey); }
+        public void SaveSkipUpdate(bool value) { GetWritableStore().SetBoolean(CollectionPath, SkipUpdateKey, value); }
+
+        public bool GetVerbose() { return GetBoolean(VerboseKey); }
+        public void SaveVerbose(bool value) { GetWritableStore().SetBoolean(CollectionPath, VerboseKey, value); }
+
+        public string GetAdditionalGlobalOptions()
+        {
+            var store = _settingsManager.GetReadOnlySettingsStore(SettingsScope.UserSettings);
+            return store.CollectionExists(CollectionPath)
+                ? store.GetString(CollectionPath, AdditionalGlobalOptionsKey, string.Empty)
+                : string.Empty;
+        }
+
+        public void SaveAdditionalGlobalOptions(string value)
+        {
+            GetWritableStore().SetString(CollectionPath, AdditionalGlobalOptionsKey, (value ?? string.Empty).Trim());
+        }
+
+        /// <summary>The options placed before the scanner command (`xygeni &lt;options&gt; scan ...`).</summary>
+        public List<string> GetScannerGlobalOptions()
+        {
+            var enabled = new List<string>();
+            if (GetSkipSslVerify()) enabled.Add(ScannerGlobalOptions.SkipSslVerify);
+            if (GetSkipUpdate()) enabled.Add(ScannerGlobalOptions.SkipUpdate);
+            if (GetVerbose()) enabled.Add(ScannerGlobalOptions.Verbose);
+            return ScannerGlobalOptions.Build(enabled, GetAdditionalGlobalOptions());
+        }
+
+        private bool GetBoolean(string key)
+        {
+            var store = _settingsManager.GetReadOnlySettingsStore(SettingsScope.UserSettings);
+            return store.CollectionExists(CollectionPath) && store.GetBoolean(CollectionPath, key, false);
         }
 
         public void SaveProxySettings(ProxySettings proxySettings)

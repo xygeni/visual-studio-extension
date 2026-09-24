@@ -377,17 +377,22 @@ namespace vs2026_plugin.Services
                     WorkingDirectory = workingDir ?? Path.GetTempPath()
                 };
 
+                // Scanner global options go before the command (xygeni <global> scan ...); args keeps the command
+                // first, so the isScanCommand check below still sees it. (xygeni/tech-support#378)
+                List<string> globalArgs = _configurationService.GetScannerGlobalOptions();
+                List<string> blockedArgs = ScannerGlobalOptions.BlockedIn(_configurationService.GetAdditionalGlobalOptions());
+                if (blockedArgs.Count > 0)
+                {
+                    _logger.Log($"  Ignoring scanner options {string.Join(" ", blockedArgs)}: -q/--quiet hide the scanner output the extension reads; the API token comes from the Xygeni configuration.");
+                }
+                var commandArgs = globalArgs.Concat(args).ToList();
+
                 // Add arguments carefully
                 // TS: ["-NoProfile","-ExecutionPolicy", "Bypass", "-File", scannerScriptPath, ...args]
-                string psArgs = $"-NoProfile -ExecutionPolicy Bypass -File \"{scannerScriptPath}\"";
-                
+                string psPrefix = $"-NoProfile -ExecutionPolicy Bypass -File \"{scannerScriptPath}\"";
+
                 // Append other args wrapping in quotes if needed
-                foreach(var arg in args)
-                {
-                    psArgs += $" \"{arg}\"";
-                }
-                
-                startInfo.Arguments = psArgs;
+                startInfo.Arguments = psPrefix + string.Concat(commandArgs.Select(arg => $" \"{arg}\""));
 
                 // Add Env Vars
                 foreach (var kvp in env)
@@ -403,13 +408,18 @@ namespace vs2026_plugin.Services
 
                 using (var process = new Process { StartInfo = startInfo })
                 {
+                    bool sawCertificateError = false;
                     process.OutputDataReceived += (sender, e) => 
                     { 
-                        if (e.Data != null) _logger.Log(StripAnsiEscapeSequences(e.Data)); 
+                        if (e.Data == null) return;
+                        _logger.Log(StripAnsiEscapeSequences(e.Data));
+                        if (ScannerGlobalOptions.IsCertificateError(e.Data)) sawCertificateError = true;
                     };
                     process.ErrorDataReceived += (sender, e) => 
                     { 
-                        if (e.Data != null) _logger.Log(StripAnsiEscapeSequences(e.Data)); 
+                        if (e.Data == null) return;
+                        _logger.Log(StripAnsiEscapeSequences(e.Data));
+                        if (ScannerGlobalOptions.IsCertificateError(e.Data)) sawCertificateError = true;
                     };
 
                     DateTime startedAtUtc = DateTime.UtcNow;
@@ -423,11 +433,17 @@ namespace vs2026_plugin.Services
                         try { process.Kill(); } catch { }
                         throw new Exception("Scanner process timeout");
                     }
+                    // The timed wait does not drain the asynchronous output handlers; this one does (the process has exited).
+                    process.WaitForExit();
 
                     int exitCode = process.ExitCode;
                     bool isScanCommand = args.Count > 0 && args[0] == "scan";
                     if (!IsSuccessfulExit(exitCode, isScanCommand, startInfo.WorkingDirectory, startedAtUtc))
                     {
+                        if (sawCertificateError && !globalArgs.Contains(ScannerGlobalOptions.SkipSslVerify))
+                        {
+                            SkipSslVerifyPrompt.Suggest(_logger);
+                        }
                         throw new Exception($"Scanner process failed with exit code {exitCode}");
                     }
                     return exitCode;
