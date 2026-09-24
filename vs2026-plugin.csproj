@@ -62,6 +62,8 @@
     <Compile Include="Services\XygeniConfigurationService.cs" />
     <Compile Include="Services\XygeniInstallerService.cs" />
     <Compile Include="Services\XygeniScannerService.cs" />
+    <Compile Include="Services\ScannerGlobalOptions.cs" />
+    <Compile Include="Services\SkipSslVerifyPrompt.cs" />
     <Compile Include="Services\XygeniLoggerService.cs" />
     <Compile Include="Services\XygeniIssueService.cs" />
     <Compile Include="Services\XygeniIssueLocation.cs" />
@@ -78,6 +80,7 @@
     <Compile Include="Models\CodeFlowFrame.cs" />
     <Compile Include="Models\SecretsXygeniIssue.cs" />
     <Compile Include="Models\VulnXygeniIssue.cs" />
+    <Compile Include="Models\SingleLocationXygeniIssue.cs" />
     <Compile Include="Models\QualityXygeniIssue.cs" />
     <Compile Include="Models\ApisecXygeniIssue.cs" />
     <Compile Include="Models\AiXygeniIssue.cs" />

@@ -104,6 +104,41 @@
                 <Run Text="." />
             </TextBlock>
 
+            <!-- Scanner global options, placed before the command: xygeni <options> scan ... (xygeni/tech-support#378) -->
+            <CheckBox x:Name="SkipSslVerifyChk"
+                Content="Skip SSL verification (--skip-ssl-verify)"
+                ToolTip="For corporate proxies that inspect TLS traffic. This reduces transport security: use it only in trusted networks."
+                Margin="0,0,0,10"
+                Click="SkipSslVerifyChk_Click"
+                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+
+            <Expander x:Name="ScannerOptionsExpander" Header="Scanner Options (Advanced)"
+                IsExpanded="False" Margin="0,0,0,12"
+                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}">
+                <StackPanel Margin="0,6,0,0">
+                    <CheckBox x:Name="SkipUpdateChk"
+                        Content="Skip scanner update (--skip-update)"
+                        ToolTip="Do not update the scanner before running it. You may run an outdated scanner version."
+                        Margin="0,0,0,8"
+                        Checked="ScannerOptionChk_Changed"
+                        Unchecked="ScannerOptionChk_Changed"
+                        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                    <CheckBox x:Name="VerboseChk"
+                        Content="Verbose scanner output (--verbose)"
+                        Margin="0,0,0,8"
+                        Checked="ScannerOptionChk_Changed"
+                        Unchecked="ScannerOptionChk_Changed"
+                        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                    <TextBlock Text="Additional global options" Margin="0,0,0,3"
+                        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                    <TextBox x:Name="AdditionalGlobalOptionsTxt" Margin="0,0,0,3" Width="320" HorizontalAlignment="Left"
+                        LostFocus="AdditionalGlobalOptionsTxt_LostFocus"/>
+                    <TextBlock Width="320" HorizontalAlignment="Left" TextWrapping="Wrap" Opacity="0.8"
+                        Text="Placed before the scanner command, separated by spaces (e.g. -cop key=value). Leave empty unless Xygeni support asks for it. -q/--quiet (the extension reads the scanner output) and --api-key (the token comes from this configuration) are ignored."
+                        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                </StackPanel>
+            </Expander>
+
             <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                 <TextBlock Text="Xygeni Scanner Status: "
                     Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
