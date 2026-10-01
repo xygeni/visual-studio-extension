@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.Settings;
@@ -20,6 +21,8 @@ namespace vs2026_plugin.Services
         public string Status { get; set; } // "running", "completed", "failed"
         public object IssuesFound { get; set; }
         public string Summary { get; set; }
+        // Scan types from the `--run=` argument: the reports this scan rewrote. Null = unknown, re-read all.
+        public IReadOnlyList<string> ScanTypes { get; set; }
     }
 
     public class XygeniScannerService
@@ -32,6 +35,10 @@ namespace vs2026_plugin.Services
 
         // Constants
         private const int TimeoutMs = 1800000; // 30 minutes
+
+        // CLI ErrorCodes: 127 = some scan type not licensed; >= 128 = issues found (a successful scan).
+        private const int LicenseErrorExitCode = 127;
+        private const int AnyIssueFoundExitCode = 128;
 
         private readonly string[] _runAnalysisArgs = {
             "scan",
@@ -55,6 +62,8 @@ namespace vs2026_plugin.Services
         private readonly string[] _runRectifyScaArgs = { "util", "rectify", "--sca" };
         private readonly string[] _runRectifySastArgs = { "util", "rectify", "--sast" };
         private readonly string[] _runRectifyQualityArgs = { "util", "rectify", "--quality" };
+        // RectifyCommand.java `--ai` (runAiRectify) takes the same --file-path/--detector/--line as SAST/quality.
+        private readonly string[] _runRectifyAiArgs = { "util", "rectify", "--ai" };
 
         // State
         private bool _scannerRunning = false;
@@ -113,39 +122,42 @@ namespace vs2026_plugin.Services
             _logger.Log("=================================================");
             _logger.Log($"  Running scan on source folder: {sourceFolder}");
 
-            var currentScan = new ScanResult { Timestamp = timestamp, Status = "running", IssuesFound = null, Summary = "" };
+            var scanTypes = GetScanTypes(_runAnalysisArgs);
+            var currentScan = new ScanResult { Timestamp = timestamp, Status = "running", IssuesFound = null, Summary = "", ScanTypes = scanTypes };
             _scans.Add(currentScan);
             OnChanged();
 
             try
             {
-                await RunAnalysisCommandAsync(sourceFolder, xygeniScannerPath, _logger);
+                int exitCode = await RunAnalysisCommandAsync(sourceFolder, xygeniScannerPath, _logger);
 
                 _logger.Log("  Scanner finished");
-                
+
                 _scans.Remove(currentScan);
-                
+
                 var totalTime = (DateTime.Now - timestamp).TotalSeconds;
-                _scans.Add(new ScanResult { 
-                    Timestamp = timestamp, 
-                    Status = "completed", 
-                    IssuesFound = null, 
-                    Summary = $"Duration: {totalTime:F2}s" 
+                _scans.Add(new ScanResult {
+                    Timestamp = timestamp,
+                    Status = "completed",
+                    IssuesFound = null,
+                    Summary = $"Duration: {totalTime:F2}s{LicenseNote(exitCode)}",
+                    ScanTypes = scanTypes
                 });
-                
-                _exitCode = 0;
+
+                _exitCode = exitCode;
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error running scanner");
-                
+
                 _exitCode = 1;
                 _scans.Remove(currentScan);
-                _scans.Add(new ScanResult { 
-                    Timestamp = timestamp, 
-                    Status = "failed", 
-                    IssuesFound = null, 
-                    Summary = "" 
+                _scans.Add(new ScanResult {
+                    Timestamp = timestamp,
+                    Status = "failed",
+                    IssuesFound = null,
+                    Summary = "",
+                    ScanTypes = scanTypes
                 });
             }
             finally
@@ -154,7 +166,7 @@ namespace vs2026_plugin.Services
             }
         }
 
-        public async Task RunAnalysisCommandAsync(string sourceFolder, string xygeniInstallPath, ILogger logger)
+        public async Task<int> RunAnalysisCommandAsync(string sourceFolder, string xygeniInstallPath, ILogger logger)
         {
             // args include -d sourceFolder.
 
@@ -166,7 +178,7 @@ namespace vs2026_plugin.Services
 
             var projectMetadataFolder = await XygeniConfigurationService.GetInstance().GetMetadataFolderAsyncForProject();
 
-            await CallScannerAsync(xygeniInstallPath, args, logger, projectMetadataFolder);
+            return await CallScannerAsync(xygeniInstallPath, args, logger, projectMetadataFolder);
         }
 
         public async Task RunIncrementalAnalysisAsync(string sourceFolder, string xygeniScannerPath)
@@ -184,13 +196,14 @@ namespace vs2026_plugin.Services
             _logger.Log("=================================================");
             _logger.Log($"  Running incremental scan on source folder: {sourceFolder}");
 
-            var currentScan = new ScanResult { Timestamp = timestamp, Status = "running", IssuesFound = null, Summary = "incremental" };
+            var scanTypes = GetScanTypes(_runIncrementalAnalysisArgs);
+            var currentScan = new ScanResult { Timestamp = timestamp, Status = "running", IssuesFound = null, Summary = "incremental", ScanTypes = scanTypes };
             _scans.Add(currentScan);
             OnChanged();
 
             try
             {
-                await RunIncrementalAnalysisCommandAsync(sourceFolder, xygeniScannerPath, _logger);
+                int exitCode = await RunIncrementalAnalysisCommandAsync(sourceFolder, xygeniScannerPath, _logger);
 
                 _logger.Log("  Incremental scanner finished");
 
@@ -202,10 +215,11 @@ namespace vs2026_plugin.Services
                     Timestamp = timestamp,
                     Status = "completed",
                     IssuesFound = null,
-                    Summary = $"Incremental - Duration: {totalTime:F2}s"
+                    Summary = $"Incremental - Duration: {totalTime:F2}s{LicenseNote(exitCode)}",
+                    ScanTypes = scanTypes
                 });
 
-                _exitCode = 0;
+                _exitCode = exitCode;
             }
             catch (Exception ex)
             {
@@ -218,7 +232,8 @@ namespace vs2026_plugin.Services
                     Timestamp = timestamp,
                     Status = "failed",
                     IssuesFound = null,
-                    Summary = "incremental"
+                    Summary = "incremental",
+                    ScanTypes = scanTypes
                 });
             }
             finally
@@ -227,7 +242,7 @@ namespace vs2026_plugin.Services
             }
         }
 
-        public async Task RunIncrementalAnalysisCommandAsync(string sourceFolder, string xygeniInstallPath, ILogger logger)
+        public async Task<int> RunIncrementalAnalysisCommandAsync(string sourceFolder, string xygeniInstallPath, ILogger logger)
         {
             var args = new List<string>(_runIncrementalAnalysisArgs);
             args.Add("-d");
@@ -235,7 +250,7 @@ namespace vs2026_plugin.Services
 
             var projectMetadataFolder = await XygeniConfigurationService.GetInstance().GetMetadataFolderAsyncForProject();
 
-            await CallScannerAsync(xygeniInstallPath, args, logger, projectMetadataFolder);
+            return await CallScannerAsync(xygeniInstallPath, args, logger, projectMetadataFolder);
         }
 
         public async Task RunRectifyScaCommandAsync(string filePath, string dependency, string xygeniInstallPath, ILogger logger)
@@ -275,6 +290,19 @@ namespace vs2026_plugin.Services
             await CallScannerAsync(xygeniInstallPath, args, logger, Path.GetDirectoryName(filePath));
         }
 
+        public async Task RunRectifyAiCommandAsync(string filePath, string detector, string line, string xygeniInstallPath, ILogger logger)
+        {
+            var args = new List<string>(_runRectifyAiArgs);
+            args.Add("--file-path");
+            args.Add(filePath);
+            args.Add("--detector");
+            args.Add(detector);
+            args.Add("--line");
+            args.Add(line);
+
+            await CallScannerAsync(xygeniInstallPath, args, logger, Path.GetDirectoryName(filePath));
+        }
+
         public async Task RunAiExplainCommandAsync(string issueJson, string outputFile, string xygeniInstallPath, ILogger logger)
         {
             string outputDir = Path.GetDirectoryName(outputFile);
@@ -304,7 +332,8 @@ namespace vs2026_plugin.Services
             }
         }
 
-        private async Task CallScannerAsync(string xygeniInstallPath, List<string> args, ILogger logger, string workingDir)
+        // Returns the scanner exit code of a run accepted as successful (see IsSuccessfulExit); throws otherwise.
+        private async Task<int> CallScannerAsync(string xygeniInstallPath, List<string> args, ILogger logger, string workingDir)
         {
             if (_scannerRunning)
             {
@@ -314,7 +343,7 @@ namespace vs2026_plugin.Services
 
             try
             {
-                await ExecuteScannerCallAsync(xygeniInstallPath, args, logger, workingDir);
+                return await ExecuteScannerCallAsync(xygeniInstallPath, args, logger, workingDir);
             }
             finally
             {
@@ -322,9 +351,9 @@ namespace vs2026_plugin.Services
             }
         }
 
-        private async Task ExecuteScannerCallAsync(string xygeniInstallPath, List<string> args, ILogger logger, string workingDir)
+        private async Task<int> ExecuteScannerCallAsync(string xygeniInstallPath, List<string> args, ILogger logger, string workingDir)
         {
-            await Task.Run(async () =>
+            return await Task.Run(async () =>
             {
                 if (string.IsNullOrEmpty(xygeniInstallPath))
                 {
@@ -348,17 +377,22 @@ namespace vs2026_plugin.Services
                     WorkingDirectory = workingDir ?? Path.GetTempPath()
                 };
 
+                // Scanner global options go before the command (xygeni <global> scan ...); args keeps the command
+                // first, so the isScanCommand check below still sees it. (xygeni/tech-support#378)
+                List<string> globalArgs = _configurationService.GetScannerGlobalOptions();
+                List<string> blockedArgs = ScannerGlobalOptions.BlockedIn(_configurationService.GetAdditionalGlobalOptions());
+                if (blockedArgs.Count > 0)
+                {
+                    _logger.Log($"  Ignoring scanner options {string.Join(" ", blockedArgs)}: -q/--quiet hide the scanner output the extension reads; the API token comes from the Xygeni configuration.");
+                }
+                var commandArgs = globalArgs.Concat(args).ToList();
+
                 // Add arguments carefully
                 // TS: ["-NoProfile","-ExecutionPolicy", "Bypass", "-File", scannerScriptPath, ...args]
-                string psArgs = $"-NoProfile -ExecutionPolicy Bypass -File \"{scannerScriptPath}\"";
-                
+                string psPrefix = $"-NoProfile -ExecutionPolicy Bypass -File \"{scannerScriptPath}\"";
+
                 // Append other args wrapping in quotes if needed
-                foreach(var arg in args)
-                {
-                    psArgs += $" \"{arg}\"";
-                }
-                
-                startInfo.Arguments = psArgs;
+                startInfo.Arguments = psPrefix + string.Concat(commandArgs.Select(arg => $" \"{arg}\""));
 
                 // Add Env Vars
                 foreach (var kvp in env)
@@ -374,15 +408,21 @@ namespace vs2026_plugin.Services
 
                 using (var process = new Process { StartInfo = startInfo })
                 {
+                    bool sawCertificateError = false;
                     process.OutputDataReceived += (sender, e) => 
                     { 
-                        if (e.Data != null) _logger.Log(StripAnsiEscapeSequences(e.Data)); 
+                        if (e.Data == null) return;
+                        _logger.Log(StripAnsiEscapeSequences(e.Data));
+                        if (ScannerGlobalOptions.IsCertificateError(e.Data)) sawCertificateError = true;
                     };
                     process.ErrorDataReceived += (sender, e) => 
                     { 
-                        if (e.Data != null) _logger.Log(StripAnsiEscapeSequences(e.Data)); 
+                        if (e.Data == null) return;
+                        _logger.Log(StripAnsiEscapeSequences(e.Data));
+                        if (ScannerGlobalOptions.IsCertificateError(e.Data)) sawCertificateError = true;
                     };
 
+                    DateTime startedAtUtc = DateTime.UtcNow;
                     process.Start();
                     process.BeginOutputReadLine();
                     process.BeginErrorReadLine();
@@ -393,13 +433,50 @@ namespace vs2026_plugin.Services
                         try { process.Kill(); } catch { }
                         throw new Exception("Scanner process timeout");
                     }
+                    // The timed wait does not drain the asynchronous output handlers; this one does (the process has exited).
+                    process.WaitForExit();
 
-                    if (process.ExitCode != 0 && process.ExitCode <= 128)
+                    int exitCode = process.ExitCode;
+                    bool isScanCommand = args.Count > 0 && args[0] == "scan";
+                    if (!IsSuccessfulExit(exitCode, isScanCommand, startInfo.WorkingDirectory, startedAtUtc))
                     {
-                        throw new Exception($"Scanner process failed with exit code {process.ExitCode}");
+                        if (sawCertificateError && !globalArgs.Contains(ScannerGlobalOptions.SkipSslVerify))
+                        {
+                            SkipSslVerifyPrompt.Suggest(_logger);
+                        }
+                        throw new Exception($"Scanner process failed with exit code {exitCode}");
                     }
+                    return exitCode;
                 }
             });
+        }
+
+        // `scan` succeeds with 0, with >= 128 (issues found) and with 127 when the licensed scan types
+        // still wrote their reports in this run (127 with no report = licence missing or expired).
+        // `util` commands (rectify, ai-explain) only succeed with 0. (visual-studio-extension#15)
+        private bool IsSuccessfulExit(int exitCode, bool isScanCommand, string reportDir, DateTime startedAtUtc)
+        {
+            if (exitCode == 0) return true;
+            if (!isScanCommand) return false;
+            if (exitCode >= AnyIssueFoundExitCode) return true;
+            if (exitCode == LicenseErrorExitCode && HasReportWrittenSince(reportDir, startedAtUtc))
+            {
+                _logger.Log("  Some scan types are not licensed and were skipped; the licensed ones completed (see the LICENSE ERROR lines above).");
+                return true;
+            }
+            return false;
+        }
+
+        private static bool HasReportWrittenSince(string reportDir, DateTime startedAtUtc)
+        {
+            if (string.IsNullOrEmpty(reportDir) || !Directory.Exists(reportDir)) return false;
+            return Directory.EnumerateFiles(reportDir, $"*.{XygeniCommands.ReportSuffix}")
+                .Any(reportPath => File.GetLastWriteTimeUtc(reportPath) >= startedAtUtc);
+        }
+
+        private static string LicenseNote(int exitCode)
+        {
+            return exitCode == LicenseErrorExitCode ? " - some scan types are not licensed and were skipped" : "";
         }
 
         private async Task GetEnvVariables(Dictionary<string, string> env)
@@ -469,6 +546,22 @@ namespace vs2026_plugin.Services
         private string GetScannerScriptPath(string xygeniScannerPath)
         {
             return Path.Combine(xygeniScannerPath, "xygeni.ps1");
+        }
+
+        private static IReadOnlyList<string> GetScanTypes(string[] scanArgs)
+        {
+            const string runPrefix = "--run=";
+            string runArg = scanArgs.FirstOrDefault(arg => arg.StartsWith(runPrefix, StringComparison.Ordinal));
+            if (runArg == null)
+            {
+                return null;
+            }
+
+            return runArg.Substring(runPrefix.Length)
+                .Split(',')
+                .Select(scanType => scanType.Trim())
+                .Where(scanType => scanType.Length > 0)
+                .ToArray();
         }
 
         private string StripAnsiEscapeSequences(string text)

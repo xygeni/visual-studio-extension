@@ -5,13 +5,16 @@ namespace vs2026_plugin.Models
 {
     /// <summary>
     /// API Security flaw (ticket xygeni/xygeni-product-backlog#1691). Flaws are scoped to an
-    /// endpoint, a module or a service, so most of them carry no source location: File stays
-    /// empty, the positional fields stay at 0 and the finding is still listed in the tree.
+    /// endpoint, a module or a service; File/BeginLine come from the report's API inventory
+    /// (endpoint handler, handler file or OpenAPI spec) and may stay empty, in which case the
+    /// finding is still listed in the tree. The tree label (Type) is the machine flawType, like
+    /// every other category; the human Title (it embeds the endpoint) is shown in the details.
     /// No AI auto-fix: the scanner has no 'util rectify --apisec'.
     /// </summary>
-    public class ApisecXygeniIssue : AbstractXygeniIssue
+    public class ApisecXygeniIssue : SingleLocationXygeniIssue
     {
-        public string Branch { get; set; }
+        /// <summary>Human-readable label of the flaw, e.g. "Endpoint reachable without authentication: GET /users".</summary>
+        public string Title { get; set; }
         public string EndpointMethod { get; set; }
         public string EndpointPath { get; set; }
         public string ModuleName { get; set; }
@@ -26,36 +29,16 @@ namespace vs2026_plugin.Models
             return string.IsNullOrEmpty(EndpointMethod) ? EndpointPath : $"{EndpointMethod} {EndpointPath}";
         }
 
-        public override string GetIssueDetailsHtml()
+        protected override string GetDetailRowsHtml()
         {
-            return $@"
-            <div id=""tab-content-1"">
-                <table>
-                    {Field("Explanation", Explanation)}
-                    {Field("Type", Type)}
-                    {Field("Endpoint", GetEndpoint())}
-                    {Field("Module", ModuleName)}
-                    {Field("Service", ServiceName)}
-                    {Field("OWASP API Top 10", JoinList(OwaspApiTop10))}
-                    {Field("CWE", JoinList(Cwes))}
-                    {Where(Branch, null, null)}
-                    {Field("Location", File)}
-                    {Field("Found By", Detector)}
-                    {Field("Remediation", Remediation)}
-                    {GetTags()}
-                </table>
-            </div>";
+            return Field("Title", Title)
+                + Field("Endpoint", GetEndpoint())
+                + Field("Module", ModuleName)
+                + Field("Service", ServiceName)
+                + Field("OWASP API Top 10", JoinList(OwaspApiTop10))
+                + Field("CWE", JoinList(Cwes));
         }
 
-        public override string GetCodeSnippetHtmlTab()
-        {
-            if (string.IsNullOrEmpty(File)) return "";
-            return @"<input type=""radio"" name=""tabs"" id=""tab-2""><label for=""tab-2"">CODE SNIPPET</label>";
-        }
-
-        private static string JoinList(List<string> values)
-        {
-            return (values == null || values.Count == 0) ? "" : string.Join(", ", values);
-        }
+        protected override string GetTrailingRowsHtml() => FieldMarkdown("Remediation", Remediation);
     }
 }

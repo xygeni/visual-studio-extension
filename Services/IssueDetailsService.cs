@@ -809,11 +809,14 @@ namespace vs2026_plugin.Services
                string severityClass = $"severity-{issue.Severity?.ToLower() ?? "info"}";
                string explanationText = issue.Explanation ?? string.Empty;
                string explanation = explanationText.Length > 30 ? explanationText.Substring(0, 30) + "..." : explanationText;
-               // API flaws scoped to a module/service have no location: no file link to offer.
-               string fileLink = string.IsNullOrEmpty(issue.File)
+               // Service/module-scoped API flaws resolve to a file without a line, or to no file at all.
+               string locationLabel = issue.HasLocation ? $"{issue.File}:{issue.BeginLine}" : issue.File ?? string.Empty;
+               string fileLink = string.IsNullOrEmpty(locationLabel)
                    ? string.Empty
-                   : $"<div class='file-link' onclick='openFile()'>{issue.File}:{issue.BeginLine}</div>";
-               
+                   : $"<div class='file-link' onclick='openFile()'>{System.Net.WebUtility.HtmlEncode(locationLabel)}</div>";
+               // API flaw ids embed the endpoint path of the scanned repo: quote them as a JS literal.
+               string issueIdJs = JsonConvert.ToString(issue.Id ?? string.Empty, '\'', StringEscapeHandling.EscapeHtml);
+
                // Construct HTML
                return $@"
                 <!DOCTYPE html>
@@ -822,7 +825,7 @@ namespace vs2026_plugin.Services
                     <meta charset=""UTF-8"">
                     <style>{css}</style>
                     <script>
-                        const ISSUE_ID = '{issue.Id}';
+                        const ISSUE_ID = {issueIdJs};
 
                         function showTab(id) {{
                             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -843,11 +846,11 @@ namespace vs2026_plugin.Services
                 <body>
                     <div class='header'>
                         <div class='title-row'>
-                            <h1>Xygeni {issue.CategoryName} Issue</h1>
+                            <h1>Xygeni {System.Net.WebUtility.HtmlEncode(issue.CategoryName)} Issue</h1>
                         </div>
                         <div class='title-row'>
-                            <div class='severity-icon {severityClass}'>{issue.Severity}</div> 
-                            <div>{explanation}</div> 
+                            <div class='severity-icon {severityClass}'>{System.Net.WebUtility.HtmlEncode(issue.Severity)}</div>
+                            <div>{System.Net.WebUtility.HtmlEncode(explanation)}</div>
                         </div>
                         <div class='subtitle'>
                            {issue.GetSubtitleLineHtml()}

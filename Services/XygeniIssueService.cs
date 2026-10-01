@@ -23,6 +23,8 @@ namespace vs2026_plugin.Services
         private List<IXygeniIssue> _issues = new List<IXygeniIssue>();
         private bool _isReadingIssues = false;
         private bool _pendingReadIssues = false;
+        // Scan types of the reads deferred while another read runs; null = one of them was a full read.
+        private IReadOnlyList<string> _pendingScanTypes;
 
         public event EventHandler IssuesChanged;
 
@@ -39,7 +41,7 @@ namespace vs2026_plugin.Services
         private void OnScannerChanged()
         {
             var latestScan = _scannerService.GetScans()
-                .OrderByDescending(s => s.Timestamp)
+                .OrderByDescending(scan => scan.Timestamp)
                 .FirstOrDefault();
 
             // Refresh issues only when a scan has ended. A "running" update is emitted at scan start.
@@ -48,7 +50,7 @@ namespace vs2026_plugin.Services
                 return;
             }
 
-            _ = ReadIssuesAsync();
+            _ = ReadIssuesAsync(latestScan?.ScanTypes);
         }
 
        
@@ -70,15 +72,20 @@ namespace vs2026_plugin.Services
 
         public List<IXygeniIssue> GetIssuesByCategory(string category)
         {
-            return _issues.Where(i => i.Category.Equals(category, StringComparison.OrdinalIgnoreCase)).ToList();
+            return _issues.Where(issue => issue.Category.Equals(category, StringComparison.OrdinalIgnoreCase)).ToList();
         }
 
         public IXygeniIssue FindIssueById(string id)
         {
-            return _issues.FirstOrDefault(i => i.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+            return _issues.FirstOrDefault(issue => string.Equals(issue.Id, id, StringComparison.OrdinalIgnoreCase));
         }
 
-        public async Task ReadIssuesAsync()
+        // Full read: every report is re-read (startup, or a scan whose types are unknown).
+        public Task ReadIssuesAsync() => ReadIssuesAsync(null);
+
+        // scanTypes = the `--run=` list of the scan that just ended: only those reports were rewritten,
+        // so only their categories are dropped and re-read; the rest keep their current findings.
+        public async Task ReadIssuesAsync(IReadOnlyList<string> scanTypes)
         {
             _logger.Log("");
             _logger.Log("==================================================");
@@ -96,15 +103,23 @@ namespace vs2026_plugin.Services
                 string suffix = XygeniCommands.ReportSuffix;
                 if (_isReadingIssues)
                 {
+                    _pendingScanTypes = _pendingReadIssues ? MergeScanTypes(_pendingScanTypes, scanTypes) : scanTypes;
                     _pendingReadIssues = true;
                     _logger.Log("  Issues are already being read, scheduling a refresh...");
                     return;
                 }
                 _logger.Log("  Issues report directory: " + workingDir);
                 _isReadingIssues = true;
-                _issues.Clear();
-                
-                await ReadScannerOutputAsync(workingDir, suffix);
+                if (scanTypes == null)
+                {
+                    _issues.Clear();
+                }
+                else
+                {
+                    _issues.RemoveAll(issue => scanTypes.Any(scanType => string.Equals(CategoryOf(scanType), issue.Category, StringComparison.OrdinalIgnoreCase)));
+                }
+
+                await ReadScannerOutputAsync(workingDir, suffix, scanTypes);
 
                 _logger.Log($"  {_issues.Count} issues read.");
                 
@@ -123,26 +138,35 @@ namespace vs2026_plugin.Services
                 if (_pendingReadIssues)
                 {
                     _pendingReadIssues = false;
-                    _ = ReadIssuesAsync();
+                    var pendingScanTypes = _pendingScanTypes;
+                    _pendingScanTypes = null;
+                    _ = ReadIssuesAsync(pendingScanTypes);
                 }
             }
         }
 
-        public async Task ReadScannerOutputAsync(string workingDir, string suffix)
+        // A full read (null) absorbs the scoped ones; otherwise the deferred reads collapse into one union.
+        private static IReadOnlyList<string> MergeScanTypes(IReadOnlyList<string> first, IReadOnlyList<string> second)
+        {
+            if (first == null || second == null) return null;
+            return first.Union(second, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        public async Task ReadScannerOutputAsync(string workingDir, string suffix, IReadOnlyList<string> scanTypes)
         {
             try
             {
-                await ReadSecretsReportAsync(Path.Combine(workingDir, $"secrets.{suffix}"));
-                await ReadMisconfReportAsync(Path.Combine(workingDir, $"misconf.{suffix}"));
-                await ReadSastReportAsync(Path.Combine(workingDir, $"sast.{suffix}"));
-                await ReadQualityReportAsync(Path.Combine(workingDir, $"quality.{suffix}"));
-                await ReadIacReportAsync(Path.Combine(workingDir, $"iac.{suffix}"));
-                await ReadDepsReportAsync(Path.Combine(workingDir, $"deps.{suffix}"));
-                await ReadApisecReportAsync(Path.Combine(workingDir, $"apisec.{suffix}"));
-                await ReadAiReportAsync(Path.Combine(workingDir, $"ai.{suffix}"));
+                if (ShouldRead("secrets", scanTypes)) await ReadSecretsReportAsync(Path.Combine(workingDir, $"secrets.{suffix}"));
+                if (ShouldRead("misconf", scanTypes)) await ReadMisconfReportAsync(Path.Combine(workingDir, $"misconf.{suffix}"));
+                if (ShouldRead("sast", scanTypes)) await ReadSastReportAsync(Path.Combine(workingDir, $"sast.{suffix}"));
+                if (ShouldRead("quality", scanTypes)) await ReadQualityReportAsync(Path.Combine(workingDir, $"quality.{suffix}"));
+                if (ShouldRead("iac", scanTypes)) await ReadIacReportAsync(Path.Combine(workingDir, $"iac.{suffix}"));
+                if (ShouldRead("deps", scanTypes)) await ReadDepsReportAsync(Path.Combine(workingDir, $"deps.{suffix}"));
+                if (ShouldRead("apisec", scanTypes)) await ReadApisecReportAsync(Path.Combine(workingDir, $"apisec.{suffix}"));
+                if (ShouldRead("ai", scanTypes)) await ReadAiReportAsync(Path.Combine(workingDir, $"ai.{suffix}"));
 
                 // Sort issues by severity
-                _issues = _issues.OrderBy(i => i.GetSeverityLevel()).ToList();
+                _issues = _issues.OrderBy(issue => issue.GetSeverityLevel()).ToList();
             }
             catch (Exception ex)
             {
@@ -151,9 +175,22 @@ namespace vs2026_plugin.Services
             }
         }
 
-        public async Task ReadMisconfReportAsync(string filename)
+        // null = full read; otherwise only the reports named by the scan types.
+        private static bool ShouldRead(string scanType, IReadOnlyList<string> scanTypes)
         {
-            if (!File.Exists(filename)) return;
+            return scanTypes == null || scanTypes.Contains(scanType, StringComparer.OrdinalIgnoreCase);
+        }
+
+        // Report files are named after the scan type; the parsers file `deps` findings under "sca".
+        private static string CategoryOf(string scanType)
+        {
+            return string.Equals(scanType, "deps", StringComparison.OrdinalIgnoreCase) ? "sca" : scanType;
+        }
+
+        // Synchronous file read wrapped in a Task so the report readers share one signature.
+        public Task ReadMisconfReportAsync(string filename)
+        {
+            if (!File.Exists(filename)) return Task.CompletedTask;
 
             try
             {
@@ -166,11 +203,13 @@ namespace vs2026_plugin.Services
                 _logger.Error(ex, "Error reading misconf output:");
                 throw;
             }
+            return Task.CompletedTask;
         }
 
-        public async Task ReadSastReportAsync(string filename)
+        // Synchronous file read wrapped in a Task so the report readers share one signature.
+        public Task ReadSastReportAsync(string filename)
         {
-            if (!File.Exists(filename)) return;
+            if (!File.Exists(filename)) return Task.CompletedTask;
 
             try
             {
@@ -183,11 +222,13 @@ namespace vs2026_plugin.Services
                 _logger.Error(ex, "Error reading sast output:");
                 throw;
             }
+            return Task.CompletedTask;
         }
 
-        public async Task ReadQualityReportAsync(string filename)
+        // Synchronous file read wrapped in a Task so the report readers share one signature.
+        public Task ReadQualityReportAsync(string filename)
         {
-            if (!File.Exists(filename)) return;
+            if (!File.Exists(filename)) return Task.CompletedTask;
 
             try
             {
@@ -200,11 +241,13 @@ namespace vs2026_plugin.Services
                 _logger.Error(ex, "Error reading quality output:");
                 throw;
             }
+            return Task.CompletedTask;
         }
 
-        public async Task ReadIacReportAsync(string filename)
+        // Synchronous file read wrapped in a Task so the report readers share one signature.
+        public Task ReadIacReportAsync(string filename)
         {
-            if (!File.Exists(filename)) return;
+            if (!File.Exists(filename)) return Task.CompletedTask;
 
             try
             {
@@ -217,11 +260,13 @@ namespace vs2026_plugin.Services
                 _logger.Error(ex, "Error reading iac output:");
                 throw;
             }
+            return Task.CompletedTask;
         }
 
-        public async Task ReadDepsReportAsync(string filename)
+        // Synchronous file read wrapped in a Task so the report readers share one signature.
+        public Task ReadDepsReportAsync(string filename)
         {
-            if (!File.Exists(filename)) return;
+            if (!File.Exists(filename)) return Task.CompletedTask;
 
             try
             {
@@ -234,11 +279,13 @@ namespace vs2026_plugin.Services
                 _logger.Error(ex, "Error reading deps output:");
                 throw;
             }
+            return Task.CompletedTask;
         }
 
-        public async Task ReadApisecReportAsync(string filename)
+        // Synchronous file read wrapped in a Task so the report readers share one signature.
+        public Task ReadApisecReportAsync(string filename)
         {
-            if (!File.Exists(filename)) return;
+            if (!File.Exists(filename)) return Task.CompletedTask;
 
             try
             {
@@ -251,11 +298,13 @@ namespace vs2026_plugin.Services
                 _logger.Error(ex, "Error reading apisec output:");
                 throw;
             }
+            return Task.CompletedTask;
         }
 
-        public async Task ReadAiReportAsync(string filename)
+        // Synchronous file read wrapped in a Task so the report readers share one signature.
+        public Task ReadAiReportAsync(string filename)
         {
-            if (!File.Exists(filename)) return;
+            if (!File.Exists(filename)) return Task.CompletedTask;
 
             try
             {
@@ -268,11 +317,13 @@ namespace vs2026_plugin.Services
                 _logger.Error(ex, "Error reading ai output:");
                 throw;
             }
+            return Task.CompletedTask;
         }
 
-        public async Task ReadSecretsReportAsync(string filename)
+        // Synchronous file read wrapped in a Task so the report readers share one signature.
+        public Task ReadSecretsReportAsync(string filename)
         {
-            if (!File.Exists(filename)) return;
+            if (!File.Exists(filename)) return Task.CompletedTask;
 
             try
             {
@@ -285,6 +336,7 @@ namespace vs2026_plugin.Services
                 _logger.Error(ex, "Error reading secrets output:");
                 throw;
             }
+            return Task.CompletedTask;
         }
 
         private void ProcessMisconfReport(JObject jsonRaw)
@@ -556,22 +608,27 @@ namespace vs2026_plugin.Services
 
         private void ProcessApisecReport(JObject jsonRaw)
         {
-            // Findings live under `flaws`; the sibling `services` / `dataObjects` arrays are the
-            // discovered API inventory, not findings. Flaws scoped to a module or a service carry
-            // no `location`, so the positional fields stay at their defaults and the issue is kept.
+            // Findings live under `flaws`; the sibling `services` array is the discovered API inventory,
+            // which is where the flaws' source positions live (see ResolveApisecLocation).
             var flaws = jsonRaw["flaws"] as JArray ?? new JArray();
             string tool = jsonRaw["metadata"]?["reportProperties"]?["tool.name"]?.ToString();
+
+            var handlerByEndpointId = new Dictionary<string, JToken>(StringComparer.OrdinalIgnoreCase);
+            var specFileByModuleName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            IndexApiInventory(jsonRaw["services"] as JArray, handlerByEndpointId, specFileByModuleName);
 
             foreach (var flaw in flaws)
             {
                 if (flaw == null || flaw.Type == JTokenType.Null) continue;
 
-                var location = flaw["location"];
+                ResolveApisecLocation(flaw, handlerByEndpointId, specFileByModuleName, out string file, out int line);
                 var issue = new ApisecXygeniIssue
                 {
                     Id = flaw["issueId"]?.ToString(),
-                    // `title` is the human label, `flawType` the machine type: prefer the label.
-                    Type = flaw["title"]?.ToString() ?? flaw["flawType"]?.ToString() ?? "",
+                    // `flawType` is the machine type and the tree label, like every other category; the
+                    // human `title` (it embeds the endpoint) goes to the details panel.
+                    Type = flaw["flawType"]?.ToString() ?? flaw["title"]?.ToString() ?? "",
+                    Title = flaw["title"]?.ToString(),
                     Detector = flaw["detector"]?.ToString(),
                     Tool = tool,
                     Kind = "api_flaw",
@@ -579,12 +636,12 @@ namespace vs2026_plugin.Services
                     Confidence = flaw["confidence"]?.ToString() ?? "high",
                     Category = "apisec",
                     CategoryName = "API Security",
-                    File = location?["filepath"]?.ToString() ?? "",
-                    BeginLine = int.TryParse(location?["beginLine"]?.ToString(), out int bl) ? bl : 0,
-                    EndLine = int.TryParse(location?["endLine"]?.ToString(), out int el) ? el : 0,
-                    BeginColumn = int.TryParse(location?["beginColumn"]?.ToString(), out int bc) ? bc : 0,
-                    EndColumn = int.TryParse(location?["endColumn"]?.ToString(), out int ec) ? ec : 0,
-                    Code = location?["code"]?.ToString() ?? "",
+                    File = file,
+                    BeginLine = line,
+                    EndLine = line,
+                    BeginColumn = 0,
+                    EndColumn = 0,
+                    Code = "",
                     Explanation = flaw["explanation"]?.ToString() ?? "",
                     Url = flaw["url"]?.ToString() ?? "",
                     Tags = flaw["tags"]?.ToObject<List<string>>() ?? new List<string>(),
@@ -599,6 +656,75 @@ namespace vs2026_plugin.Services
                     RemediableLevel = "none"
                 };
                 _issues.Add(issue);
+            }
+        }
+
+        // services[].modules[].endpoints[]: each endpoint carries its handler {file, line}, keyed here by
+        // "<METHOD> <path>" (the flaws' `endpointId`); each module the OpenAPI spec it was read from.
+        private static void IndexApiInventory(JArray services, IDictionary<string, JToken> handlerByEndpointId, IDictionary<string, string> specFileByModuleName)
+        {
+            if (services == null) return;
+
+            foreach (var service in services)
+            {
+                var modules = service?["modules"] as JArray;
+                if (modules == null) continue;
+
+                foreach (var module in modules)
+                {
+                    string moduleName = module?["name"]?.ToString();
+                    string specFile = module?["location"]?["file"]?.ToString();
+                    if (!string.IsNullOrEmpty(moduleName) && !string.IsNullOrEmpty(specFile))
+                    {
+                        specFileByModuleName[moduleName] = specFile;
+                    }
+
+                    var endpoints = module?["endpoints"] as JArray;
+                    if (endpoints == null) continue;
+
+                    foreach (var endpoint in endpoints)
+                    {
+                        var handler = endpoint?["handler"];
+                        if (handler == null || handler.Type == JTokenType.Null) continue;
+                        handlerByEndpointId[$"{endpoint["method"]} {endpoint["path"]}"] = handler;
+                    }
+                }
+            }
+        }
+
+        // Resolution order: the flaw's own `location` (rare), its endpoint's handler, its `handler_file`
+        // property (service-scoped flaws, no line), the module's OpenAPI spec (no line); else location-less.
+        private static void ResolveApisecLocation(JToken flaw, IDictionary<string, JToken> handlerByEndpointId, IDictionary<string, string> specFileByModuleName, out string file, out int line)
+        {
+            file = flaw["location"]?["filepath"]?.ToString() ?? "";
+            line = int.TryParse(flaw["location"]?["beginLine"]?.ToString(), out int locationLine) ? locationLine : 0;
+            if (!string.IsNullOrEmpty(file)) return;
+
+            string endpointId = flaw["endpointId"]?.ToString();
+            if (string.IsNullOrEmpty(endpointId))
+            {
+                endpointId = $"{flaw["endpointMethod"]} {flaw["endpointPath"]}";
+            }
+            if (handlerByEndpointId.TryGetValue(endpointId, out JToken handler))
+            {
+                file = handler["file"]?.ToString() ?? "";
+                line = int.TryParse(handler["line"]?.ToString(), out int handlerLine) ? handlerLine : 0;
+                if (!string.IsNullOrEmpty(file)) return;
+            }
+
+            string handlerFile = flaw["properties"]?["handler_file"]?.ToString();
+            if (!string.IsNullOrEmpty(handlerFile))
+            {
+                file = handlerFile;
+                line = 0;
+                return;
+            }
+
+            string moduleName = flaw["moduleName"]?.ToString();
+            if (!string.IsNullOrEmpty(moduleName) && specFileByModuleName.TryGetValue(moduleName, out string specFile))
+            {
+                file = specFile;
+                line = 0;
             }
         }
 
@@ -641,7 +767,8 @@ namespace vs2026_plugin.Services
                     Standards = GetStandardControlIds(vulnerability["standards"] as JArray),
                     RedTeamVectors = vulnerability["redTeamVectors"]?.ToObject<List<string>>(),
                     RemediationHint = vulnerability["remediationHint"]?.ToString(),
-                    RemediableLevel = "none"
+                    // AI fix via the scanner's `util rectify --ai` (RectifyCommand.java: --ai → runAiRectify).
+                    RemediableLevel = AbstractXygeniIssue.RemediableAuto
                 };
                 _issues.Add(issue);
             }
@@ -656,7 +783,10 @@ namespace vs2026_plugin.Services
 
             foreach (var standard in standards)
             {
-                string controlId = standard?["controlId"]?.ToString() ?? standard?["std"]?.ToString();
+                // An entry is {std, version, controlId}; tolerate a bare string so one odd entry never drops every AI finding.
+                string controlId = standard is JObject standardRef
+                    ? standardRef["controlId"]?.ToString() ?? standardRef["std"]?.ToString()
+                    : standard?.ToString();
                 if (!string.IsNullOrEmpty(controlId)) controlIds.Add(controlId);
             }
             return controlIds;

@@ -6,12 +6,10 @@ namespace vs2026_plugin.Models
     /// <summary>
     /// AI Security vulnerability (ticket xygeni/xygeni-product-backlog#1692): prompt injection,
     /// unbounded user content in system prompts, mutable model labels... Single-location
-    /// findings, no taint / code-flow. No AI auto-fix: the scanner has no 'util rectify --ai'.
+    /// findings, no taint / code-flow. Auto-remediable via the scanner 'util rectify --ai'.
     /// </summary>
-    public class AiXygeniIssue : AbstractXygeniIssue
+    public class AiXygeniIssue : SingleLocationXygeniIssue
     {
-        public string Branch { get; set; }
-
         /// <summary>Kind of AI asset the finding is attached to (ai_model, ai_agent, prompt...).</summary>
         public string AssetKind { get; set; }
 
@@ -20,33 +18,13 @@ namespace vs2026_plugin.Models
         public List<string> RedTeamVectors { get; set; }
         public string RemediationHint { get; set; }
 
-        public override string GetIssueDetailsHtml()
+        protected override string GetDetailRowsHtml()
         {
-            return $@"
-            <div id=""tab-content-1"">
-                <table>
-                    {Field("Explanation", Explanation)}
-                    {Field("Type", Type)}
-                    {Field("AI Asset", AssetKind)}
-                    {Field("Standards", JoinList(Standards))}
-                    {Field("Red Team Vectors", JoinList(RedTeamVectors))}
-                    {Where(Branch, null, null)}
-                    {Field("Location", File)}
-                    {Field("Found By", Detector)}
-                    {Field("Remediation", RemediationHint)}
-                    {GetTags()}
-                </table>
-            </div>";
+            return Field("AI Asset", AssetKind)
+                + Field("Standards", JoinList(Standards))
+                + Field("Red Team Vectors", JoinList(RedTeamVectors));
         }
 
-        public override string GetCodeSnippetHtmlTab()
-        {
-            return @"<input type=""radio"" name=""tabs"" id=""tab-2""><label for=""tab-2"">CODE SNIPPET</label>";
-        }
-
-        private static string JoinList(List<string> values)
-        {
-            return (values == null || values.Count == 0) ? "" : string.Join(", ", values);
-        }
+        protected override string GetTrailingRowsHtml() => FieldMarkdown("Remediation", RemediationHint);
     }
 }

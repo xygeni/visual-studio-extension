@@ -61,7 +61,7 @@ namespace vs2026_plugin.UI.Control
                 };
 
                 foreach (var scan in _scannerService.GetScans()
-                            .OrderByDescending(s => s.Timestamp))
+                            .OrderByDescending(scanResult => scanResult.Timestamp))
                 {
                     scansRoot.Items.Add(new TreeNodeData(
                         $"[{scan.Timestamp:HH:mm:ss}] {scan.Status} {scan.Summary}",
@@ -78,8 +78,8 @@ namespace vs2026_plugin.UI.Control
                 };
 
                 var categories = _issueService.GetIssues()
-                    .GroupBy(i => i.CategoryName)
-                    .OrderBy(g => g.Key);
+                    .GroupBy(categoryIssue => categoryIssue.CategoryName)
+                    .OrderBy(categoryGroup => categoryGroup.Key);
 
                 foreach (var group in categories)
                 {
@@ -89,12 +89,14 @@ namespace vs2026_plugin.UI.Control
                         group
                     );
 
-                    foreach (var issue in group.OrderBy(i => i.GetSeverityLevel()))
+                    foreach (var issue in group.OrderBy(categoryIssue => categoryIssue.GetSeverityLevel()))
                     {
-                        // API flaws scoped to a module/service have no location: skip the "file:line" suffix.
-                        string locationSuffix = string.IsNullOrEmpty(issue.File)
-                            ? ""
-                            : $" - {Path.GetFileName(issue.File)}:{issue.BeginLine}";
+                        // Service/module-scoped API flaws resolve to a file without a line, or to no file at all.
+                        string locationSuffix = string.IsNullOrEmpty(issue.File) ? "" : $" - {Path.GetFileName(issue.File)}";
+                        if (issue.HasLocation)
+                        {
+                            locationSuffix += $":{issue.BeginLine}";
+                        }
                         var issueNodeData = new TreeNodeData(
                             $"[{issue.Severity}] {issue.Type}{locationSuffix}",
                             GetSeverityIcon(issue.Severity),
