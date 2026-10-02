@@ -1,6 +1,6 @@
 # Xygeni Security Extension for Visual Studio
 
-**Secure your codebase with Secrets, SAST, SCA, IaC & Supply Chain scanning directly within your Visual Studio environment.**
+**Secure your codebase with Secrets, SAST, SCA, IaC, Code Quality, API Security, AI Security & Supply Chain scanning directly within your Visual Studio environment.**
 
 Xygeni Security Scanner is a powerful extension that brings comprehensive security scanning to your fingertips. It integrates seamlessly with your development workflow, allowing you to identify and remediate security vulnerabilities early in the process.
 
@@ -14,7 +14,10 @@ Xygeni Security Scanner is a powerful extension that brings comprehensive securi
   - **SCA (Software Composition Analysis):** Identify vulnerabilities in your open-source dependencies.
   - **IaC (Infrastructure as Code):** Scan your IaC files (e.g., Terraform, CloudFormation) for misconfigurations.
   - **Misconfigurations:** Detect security misconfigurations in your application and services.
-- **Remediation actions for SCA and SAST Issues:** Automatically detect and provide remediation guidance for vulnerabilities found in your source code and dependencies, enabling quick fixes directly within VS Code.
+  - **Code Quality:** Find maintainability and reliability issues in your source code.
+  - **API Security:** Discover your API endpoints and detect flaws such as missing authentication, excessive data exposure or PII leaks (OWASP API Top 10).
+  - **AI Security:** Detect insecure prompts, agents and AI integrations (OWASP LLM Top 10 / Agentic ASI).
+- **Remediation actions for SCA, SAST, Code Quality and AI Security Issues:** Automatically detect and provide remediation guidance for vulnerabilities found in your source code and dependencies, enabling quick fixes directly within Visual Studio.
 - **Incremental Scan on Save (opt-in):** When enabled, saving a file triggers a debounced incremental scan (`xygeni scan --incremental`) so you get fast feedback while you code. Disabled by default; toggle it from the Xygeni Settings panel.
 - **Seamless Integration:** The extension adds a dedicated Xygeni view to your activity bar for easy access.
 - **Guided Setup:** A simple configuration process to connect to the Xygeni service.

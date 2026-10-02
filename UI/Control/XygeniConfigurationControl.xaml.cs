@@ -39,6 +39,8 @@ namespace vs2026_plugin.UI.Control
             _licenseService = LicenseService.GetInstance();
             _licenseService.Changed += OnLicenseServiceChanged;
 
+            SkipSslVerifyPrompt.Changed += OnSkipSslVerifyChanged;
+
             LoadSettings();
         }
 
@@ -86,7 +88,52 @@ namespace vs2026_plugin.UI.Control
 
             AutoScanChk.IsChecked = _configurationService.GetAutoScan();
 
+            SkipSslVerifyChk.IsChecked = _configurationService.GetSkipSslVerify();
+            SkipUpdateChk.IsChecked = _configurationService.GetSkipUpdate();
+            VerboseChk.IsChecked = _configurationService.GetVerbose();
+            AdditionalGlobalOptionsTxt.Text = _configurationService.GetAdditionalGlobalOptions();
+            // Open the advanced options while any of them is on, so what changes the scanner is visible.
+            ScannerOptionsExpander.IsExpanded = (SkipUpdateChk.IsChecked ?? false) || (VerboseChk.IsChecked ?? false)
+                || !string.IsNullOrEmpty(AdditionalGlobalOptionsTxt.Text);
+
             UpdateStatusText();
+        }
+
+        private void OnSkipSslVerifyChanged(object sender, EventArgs e)
+        {
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                SkipSslVerifyChk.IsChecked = _configurationService.GetSkipSslVerify();
+            });
+        }
+
+        // Click (not Checked/Unchecked): only the user's own clicks, not the programmatic refreshes above.
+        private void SkipSslVerifyChk_Click(object sender, RoutedEventArgs e)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            if (SkipSslVerifyChk.IsChecked ?? false)
+            {
+                SkipSslVerifyChk.IsChecked = SkipSslVerifyPrompt.ConfirmAndEnable();
+            }
+            else
+            {
+                SkipSslVerifyPrompt.SetEnabled(false);
+            }
+        }
+
+        private void ScannerOptionChk_Changed(object sender, RoutedEventArgs e)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            if (!IsLoaded) return;
+            _configurationService.SaveSkipUpdate(SkipUpdateChk.IsChecked ?? false);
+            _configurationService.SaveVerbose(VerboseChk.IsChecked ?? false);
+        }
+
+        private void AdditionalGlobalOptionsTxt_LostFocus(object sender, RoutedEventArgs e)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            _configurationService.SaveAdditionalGlobalOptions(AdditionalGlobalOptionsTxt.Text);
         }
 
         private void UpdateStatusText()
