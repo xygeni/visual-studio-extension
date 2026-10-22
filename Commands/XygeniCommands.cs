@@ -37,6 +37,8 @@ namespace vs2026_plugin.Commands
             }
             else {
                 vs2026_pluginPackage.Instance?.Logger?.Log("Xygeni Scanner is already installed.");
+                // The MCP server is installed on its own: it may be missing although the scanner is there.
+                _ = _installerService.InstallMcpLibraryAsync();
             }
         }
 

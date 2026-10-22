@@ -1,4 +1,10 @@
 
+## Unreleased
+
+- Added Malware: malware evidences are listed under "Malware" in the Xygeni explorer (kind, detector, severity, explanation, scan type, location, resolved code and tags, plus the CODE FLOW tab with graph, path and AI Explain for the evidences that carry code flows) and in the Error List. The injection point of each code-flow step is now read from the report field `injectionPoint`, so it shows in the flow details. The CODE FLOW tab no longer breaks when the scanned code of a step contains `</script>`: the flow data is written script-safe. Malware now runs in the full scan as well as in the incremental one; before, its findings were scanned but never shown (xygeni/xygeni-product-backlog#1473).
+- The MCP server is now downloaded after the scanner is installed (and on startup when it is missing); before, it was never downloaded (xygeni/xygeni-product-backlog#2382).
+- The MCP server is installed in `%USERPROFILE%\.xygeni\mcp\xygeni-mcp-server.jar`, shared with the other Xygeni IDE plugins, so its path does not change when the extension is updated. It is written to a temporary file and moved into place under a lock, so two IDEs installing at the same time never leave a half-written JAR (xygeni/xygeni-product-backlog#2382).
+
 ## 1.0.3 (2026-09-09)
 
 - Added API Security scan: API flaws are listed under "API Security" in the Xygeni explorer, with endpoint, module, service, OWASP API Top 10 and CWE details (xygeni/xygeni-product-backlog#1691).

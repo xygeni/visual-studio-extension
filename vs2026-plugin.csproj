@@ -84,6 +84,8 @@
     <Compile Include="Models\QualityXygeniIssue.cs" />
     <Compile Include="Models\ApisecXygeniIssue.cs" />
     <Compile Include="Models\AiXygeniIssue.cs" />
+    <Compile Include="Models\MalwareXygeniIssue.cs" />
+    <Compile Include="Models\ICodeFlowIssue.cs" />
     <Compile Include="Services\IssueDetailsService.cs" />
     <Compile Include="Services\CodeFlowScripts.cs" />
     <Compile Include="Services\AIExplainService.cs" />
@@ -187,6 +189,11 @@
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
     <Content Include="media\icons\ai-security.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <BuildAction>Content</BuildAction>
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
+    <Content Include="media\icons\malware.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <BuildAction>Content</BuildAction>
       <IncludeInVSIX>true</IncludeInVSIX>

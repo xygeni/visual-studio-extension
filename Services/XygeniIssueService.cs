@@ -164,6 +164,7 @@ namespace vs2026_plugin.Services
                 if (ShouldRead("deps", scanTypes)) await ReadDepsReportAsync(Path.Combine(workingDir, $"deps.{suffix}"));
                 if (ShouldRead("apisec", scanTypes)) await ReadApisecReportAsync(Path.Combine(workingDir, $"apisec.{suffix}"));
                 if (ShouldRead("ai", scanTypes)) await ReadAiReportAsync(Path.Combine(workingDir, $"ai.{suffix}"));
+                if (ShouldRead("malware", scanTypes)) await ReadMalwareReportAsync(Path.Combine(workingDir, $"malware.{suffix}"));
 
                 // Sort issues by severity
                 _issues = _issues.OrderBy(issue => issue.GetSeverityLevel()).ToList();
@@ -296,6 +297,25 @@ namespace vs2026_plugin.Services
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error reading apisec output:");
+                throw;
+            }
+            return Task.CompletedTask;
+        }
+
+        // Synchronous file read wrapped in a Task so the report readers share one signature.
+        public Task ReadMalwareReportAsync(string filename)
+        {
+            if (!File.Exists(filename)) return Task.CompletedTask;
+
+            try
+            {
+                string data = File.ReadAllText(filename);
+                var rawData = JsonConvert.DeserializeObject<JObject>(data);
+                ProcessMalwareReport(rawData);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error reading malware output:");
                 throw;
             }
             return Task.CompletedTask;
@@ -728,6 +748,50 @@ namespace vs2026_plugin.Services
             }
         }
 
+        // The malware report keeps its findings under `evidences`; the kind (execution,
+        // sensitive_data...) is the finding's label, as in the other plugins.
+        private void ProcessMalwareReport(JObject jsonRaw)
+        {
+            var evidences = jsonRaw["evidences"] as JArray ?? new JArray();
+            string tool = jsonRaw["metadata"]?["reportProperties"]?["tool.name"]?.ToString();
+
+            foreach (var evidence in evidences)
+            {
+                if (evidence == null || evidence.Type == JTokenType.Null) continue;
+
+                var location = evidence["location"];
+                var issue = new MalwareXygeniIssue
+                {
+                    Id = evidence["issueId"]?.ToString(),
+                    Type = evidence["kind"]?.ToString() ?? "",
+                    Detector = evidence["detector"]?.ToString() ?? "",
+                    Tool = tool,
+                    Kind = "malware_evidence",
+                    Severity = evidence["severity"]?.ToString() ?? "info",
+                    Confidence = "high",
+                    Category = "malware",
+                    CategoryName = "Malware",
+                    File = location?["filepath"]?.ToString() ?? "",
+                    BeginLine = int.TryParse(location?["beginLine"]?.ToString(), out int beginLine) ? beginLine : 0,
+                    EndLine = int.TryParse(location?["endLine"]?.ToString(), out int endLine) ? endLine : 0,
+                    BeginColumn = int.TryParse(location?["beginColumn"]?.ToString(), out int beginColumn) ? beginColumn : 0,
+                    EndColumn = int.TryParse(location?["endColumn"]?.ToString(), out int endColumn) ? endColumn : 0,
+                    Code = location?["code"]?.ToString() ?? "",
+                    Explanation = evidence["explanation"]?.ToString() ?? "",
+                    Url = "",
+                    Tags = evidence["tags"]?.ToObject<List<string>>() ?? new List<string>(),
+                    Branch = jsonRaw["currentBranch"]?.ToString(),
+                    ScanType = evidence["properties"]?["scanType"]?.ToString(),
+                    ResolvedCode = evidence["properties"]?["resolved.code"]?.ToString(),
+                    CodeFlows = ParseCodeFlows(evidence["codeFlows"] as JArray),
+                    RawJson = evidence.ToString(Formatting.None),
+                    // No `util rectify --malware` (RectifyCommand.java has no malware option).
+                    RemediableLevel = "none"
+                };
+                _issues.Add(issue);
+            }
+        }
+
         private void ProcessAiReport(JObject jsonRaw)
         {
             // The AI report does not reuse the SAST field names: severity is `severityFloor`, the
@@ -818,7 +882,8 @@ namespace vs2026_plugin.Services
                         {
                             Kind = rawFrame["kind"]?.ToString(),
                             Container = rawFrame["container"]?.ToString(),
-                            InjectPoint = rawFrame["injectPoint"]?.ToString(),
+                            // The scanner serializes the frame's injection point as `injectionPoint`.
+                            InjectPoint = (rawFrame["injectionPoint"] ?? rawFrame["injectPoint"])?.ToString(),
                             Category = rawFrame["category"]?.ToString(),
                             FilePath = location?["filepath"]?.ToString() ?? rawFrame["filePath"]?.ToString(),
                             BeginLine = int.TryParse((location?["beginLine"] ?? rawFrame["beginLine"])?.ToString(), out int bl) ? bl : 0,

@@ -42,7 +42,7 @@ namespace vs2026_plugin.Services
 
         private readonly string[] _runAnalysisArgs = {
             "scan",
-            "--run=deps,secrets,misconf,iac,suspectdeps,sast,quality,apisec,ai",
+            "--run=deps,secrets,misconf,iac,suspectdeps,sast,malware,quality,apisec,ai",
             "-f", "json",
             "-o", XygeniCommands.ReportSuffix,
             "--no-upload",

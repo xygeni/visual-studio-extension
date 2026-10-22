@@ -139,6 +139,10 @@ namespace vs2026_plugin.UI.Control
             {
                 iconFileName = "ai-security.png";
             }
+            else if (lowerCategory.Contains("malware"))
+            {
+                iconFileName = "malware.png";
+            }
             else if ( lowerCategory.Contains("sast"))
             {
                 iconFileName = "code-sec.png";

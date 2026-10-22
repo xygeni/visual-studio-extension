@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace vs2026_plugin.Models
 {
-    public class SastXygeniIssue : AbstractXygeniIssue
+    public class SastXygeniIssue : AbstractXygeniIssue, ICodeFlowIssue
     {
         public string Branch { get; set; }
         public string Cwe { get; set; }

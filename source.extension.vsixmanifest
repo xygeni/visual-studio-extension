@@ -3,7 +3,7 @@
     <Metadata>
         <Identity Id="v0.2.0" Version="1.0.3" Language="en-US" Publisher="Xygeni Security" />
         <DisplayName>Xygeni Security for Visual Studio</DisplayName>
-        <Description xml:space="preserve">Secure your codebase with Secrets, SAST, SCA, IaC, Code Quality, API Security, AI Security &amp; Supply Chain scanning directly within your Visual Studio environment. </Description>
+        <Description xml:space="preserve">Secure your codebase with Secrets, SAST, SCA, IaC, Code Quality, API Security, AI Security, Malware &amp; Supply Chain scanning directly within your Visual Studio environment. </Description>
         <Icon>logo_xy.png</Icon>
     </Metadata>
     <Installation>
