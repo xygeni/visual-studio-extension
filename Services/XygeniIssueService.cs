@@ -50,7 +50,9 @@ namespace vs2026_plugin.Services
                 return;
             }
 
-            _ = ReadIssuesAsync(latestScan?.ScanTypes);
+            // A full scan limited to the configured scan types (#415): every category is replaced, the ones it did
+            // not run end up empty instead of lingering from an earlier scan.
+            _ = ReadIssuesAsync(latestScan?.ScanTypes, latestScan?.FullScan ?? false);
         }
 
        
@@ -83,9 +85,12 @@ namespace vs2026_plugin.Services
         // Full read: every report is re-read (startup, or a scan whose types are unknown).
         public Task ReadIssuesAsync() => ReadIssuesAsync(null);
 
+        public Task ReadIssuesAsync(IReadOnlyList<string> scanTypes) => ReadIssuesAsync(scanTypes, false);
+
         // scanTypes = the `--run=` list of the scan that just ended: only those reports were rewritten,
-        // so only their categories are dropped and re-read; the rest keep their current findings.
-        public async Task ReadIssuesAsync(IReadOnlyList<string> scanTypes)
+        // so only their categories are dropped and re-read; the rest keep their current findings, unless
+        // the scan was a full one (dropAllCategories), which replaces everything.
+        public async Task ReadIssuesAsync(IReadOnlyList<string> scanTypes, bool dropAllCategories)
         {
             _logger.Log("");
             _logger.Log("==================================================");
@@ -110,7 +115,7 @@ namespace vs2026_plugin.Services
                 }
                 _logger.Log("  Issues report directory: " + workingDir);
                 _isReadingIssues = true;
-                if (scanTypes == null)
+                if (scanTypes == null || dropAllCategories)
                 {
                     _issues.Clear();
                 }

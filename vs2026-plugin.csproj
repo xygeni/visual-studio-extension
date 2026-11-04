@@ -90,6 +90,10 @@
     <Compile Include="Services\CodeFlowScripts.cs" />
     <Compile Include="Services\AIExplainService.cs" />
     <Compile Include="Services\LicenseService.cs" />
+    <Compile Include="Services\McpVersion.cs" />
+    <Compile Include="Services\McpUpdateInfoBar.cs" />
+    <Compile Include="Services\ScanConfig.cs" />
+    <Compile Include="Services\ScanOptions.cs" />
     <Compile Include="Editor\XygeniIssueErrorTagger.cs" />
     <Compile Include="Editor\XygeniDocumentSaveListener.cs" />
     <Compile Include="UI\Window\IssueDetailsToolWindow.cs" />
@@ -134,6 +138,7 @@
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="System.Net.Http" />
+    <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xaml" />
     <Reference Include="WindowsBase" />    
     <Reference Include="Markdig, Version=0.38.0, Culture=neutral, PublicKeyToken=null">

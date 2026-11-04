@@ -88,6 +88,12 @@ namespace vs2026_plugin.UI.Control
                         GetCategoryIcon(group.Key),
                         group
                     );
+                    // First child: runs this scan type alone, keeping the findings of the other categories (#415).
+                    string scanType = GetCategoryScanType(group.Key);
+                    if (scanType != null)
+                    {
+                        catNode.Items.Add(new TreeNodeData($"Run {group.Key} scan only", GetIconPath("play.png"), new RunCategoryScan(scanType)));
+                    }
 
                     foreach (var issue in group.OrderBy(categoryIssue => categoryIssue.GetSeverityLevel()))
                     {
@@ -123,6 +129,24 @@ namespace vs2026_plugin.UI.Control
         }
 
         
+
+        /// <summary>Category name of the explorer → the <c>--run</c> scan type that feeds it.</summary>
+        private static string GetCategoryScanType(string categoryName)
+        {
+            switch (categoryName)
+            {
+                case "SCA": return "deps";
+                case "SAST": return "sast";
+                case "Code Quality": return "quality";
+                case "Misconfigurations": return "misconf";
+                case "Secrets": return "secrets";
+                case "IaC": return "iac";
+                case "API Security": return "apisec";
+                case "AI Security": return "ai";
+                case "Malware": return "malware";
+                default: return null;
+            }
+        }
 
         private string GetCategoryIcon(string categoryName)
         {

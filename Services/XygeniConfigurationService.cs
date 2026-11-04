@@ -32,6 +32,12 @@ namespace vs2026_plugin.Services
         private const string SkipUpdateKey = "ScannerSkipUpdate";
         private const string VerboseKey = "ScannerVerbose";
         private const string AdditionalGlobalOptionsKey = "ScannerAdditionalGlobalOptions";
+        // MCP server updates (xygeni/xygeni-product-backlog#2382): notify (default), auto or off, and an ignored version
+        private const string McpUpdateModeKey = "McpUpdateMode";
+        private const string McpIgnoredVersionKey = "McpIgnoredVersion";
+        public const string McpUpdateNotify = "notify";
+        public const string McpUpdateAuto = "auto";
+        public const string McpUpdateOff = "off";
         private const string MetadataFolderKey = ".xygenidata";
 
         private readonly SettingsManager _settingsManager;
@@ -172,6 +178,31 @@ namespace vs2026_plugin.Services
         public void SaveAdditionalGlobalOptions(string value)
         {
             GetWritableStore().SetString(CollectionPath, AdditionalGlobalOptionsKey, (value ?? string.Empty).Trim());
+        }
+
+        /// <summary>How a newer published MCP server is handled: notify (default), auto or off.</summary>
+        public string GetMcpUpdateMode()
+        {
+            var store = _settingsManager.GetReadOnlySettingsStore(SettingsScope.UserSettings);
+            string mode = store.CollectionExists(CollectionPath) ? store.GetString(CollectionPath, McpUpdateModeKey, McpUpdateNotify) : McpUpdateNotify;
+            return mode == McpUpdateAuto || mode == McpUpdateOff ? mode : McpUpdateNotify;
+        }
+
+        public void SaveMcpUpdateMode(string mode)
+        {
+            GetWritableStore().SetString(CollectionPath, McpUpdateModeKey, mode == McpUpdateAuto || mode == McpUpdateOff ? mode : McpUpdateNotify);
+        }
+
+        /// <summary>A published version the user chose not to be told about again; empty when none.</summary>
+        public string GetMcpIgnoredVersion()
+        {
+            var store = _settingsManager.GetReadOnlySettingsStore(SettingsScope.UserSettings);
+            return store.CollectionExists(CollectionPath) ? store.GetString(CollectionPath, McpIgnoredVersionKey, string.Empty) : string.Empty;
+        }
+
+        public void SaveMcpIgnoredVersion(string version)
+        {
+            GetWritableStore().SetString(CollectionPath, McpIgnoredVersionKey, (version ?? string.Empty).Trim());
         }
 
         /// <summary>The options placed before the scanner command (`xygeni &lt;options&gt; scan ...`).</summary>

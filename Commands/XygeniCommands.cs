@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Windows;
+using Microsoft.VisualStudio.Shell;
 using vs2026_plugin.Services;
 using System.Threading.Tasks;
 
@@ -33,16 +35,129 @@ namespace vs2026_plugin.Commands
             }
 
             if(!_installerService.CheckScannerInstallation()) {
-                _installerService.InstallAsync(apiUrl, token);
+                await _installerService.InstallAsync(apiUrl, token);
             }
             else {
                 vs2026_pluginPackage.Instance?.Logger?.Log("Xygeni Scanner is already installed.");
                 // The MCP server is installed on its own: it may be missing although the scanner is there.
-                _ = _installerService.InstallMcpLibraryAsync();
+                await _installerService.InstallMcpLibraryAsync();
+            }
+            // The connection and license were validated before: time for the daily MCP server version check.
+            await CheckMcpUpdatesAsync(force: false);
+        }
+
+        /// <summary>
+        /// Checks whether a newer MCP server is published and acts on the "MCP server updates" setting: notify
+        /// (Update / Ignore this version), update in the background, or nothing. The installer checks at most once
+        /// every 24 h across IDEs unless <paramref name="force"/> (the button, which also reports "up to date" and
+        /// failures). A failed check is only logged (xygeni/xygeni-product-backlog#2382).
+        /// </summary>
+        public static async Task CheckMcpUpdatesAsync(bool force)
+        {
+            var logger = vs2026_pluginPackage.Instance?.Logger;
+            var config = XygeniConfigurationService.GetInstance();
+            string mode = config.GetMcpUpdateMode();
+            if (!force && mode == XygeniConfigurationService.McpUpdateOff) return;
+
+            XygeniInstallerService.McpUpdateCheck result;
+            try
+            {
+                result = await XygeniInstallerService.GetInstance().CheckMcpUpdateAsync(force).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger?.Error(ex, "MCP server update check failed");
+                if (force) await ShowMcpMessageAsync($"Could not check for Xygeni MCP server updates: {ex.Message}", MessageBoxImage.Warning);
+                return;
+            }
+
+            switch (result.Status)
+            {
+                case XygeniInstallerService.McpUpdateStatus.NotInstalled:
+                    if (force) await ShowMcpMessageAsync("The Xygeni MCP server is not installed yet. Save & Install first.", MessageBoxImage.Warning);
+                    return;
+                case XygeniInstallerService.McpUpdateStatus.Skipped:
+                    return;
+                case XygeniInstallerService.McpUpdateStatus.Unavailable:
+                    if (force) await ShowMcpMessageAsync("Could not check for Xygeni MCP server updates: the published version is not available.", MessageBoxImage.Warning);
+                    return;
+                case XygeniInstallerService.McpUpdateStatus.UpToDate:
+                    if (force) await ShowMcpMessageAsync($"The Xygeni MCP server is up to date ({result.Available}).", MessageBoxImage.Information);
+                    return;
+            }
+
+            if (!force && config.GetMcpIgnoredVersion() == result.Available)
+            {
+                logger?.Log($"MCP server {result.Available} is ignored by the user");
+                return;
+            }
+            if (!force && mode == XygeniConfigurationService.McpUpdateAuto)
+            {
+                await UpdateMcpLibraryAsync();
+                return;
+            }
+
+            string message = $"A new version of the Xygeni MCP server is available ({result.Installed ?? "unknown"} \u2192 {result.Available}).";
+            string available = result.Available;
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            McpUpdateInfoBar.Show(message, new[] { ("Update", "update"), ("Ignore this version", "ignore") }, action =>
+            {
+                if (action == "update")
+                {
+                    _ = UpdateMcpLibraryAsync();
+                }
+                else if (action == "ignore")
+                {
+                    config.SaveMcpIgnoredVersion(available);
+                    logger?.Log($"MCP server {available} will not be offered again");
+                }
+            });
+        }
+
+        /// <summary>Downloads the published MCP server over the installed one and says when it is loaded.</summary>
+        public static async Task UpdateMcpLibraryAsync()
+        {
+            var logger = vs2026_pluginPackage.Instance?.Logger;
+            var installer = XygeniInstallerService.GetInstance();
+            try
+            {
+                logger?.Log("Updating Xygeni MCP server...");
+                var outcome = await installer.UpdateMcpLibraryAsync().ConfigureAwait(false);
+                string version = installer.GetMcpInstalledVersion() ?? "the published version";
+                if (outcome == XygeniInstallerService.McpDownloadOutcome.Installed)
+                {
+                    await ShowMcpMessageAsync($"Xygeni MCP server updated to {version}. Restart your MCP client to load it.", MessageBoxImage.Information);
+                }
+                else
+                {
+                    await ShowMcpMessageAsync("The Xygeni MCP server update was downloaded but the installed JAR is in use. "
+                        + "Close your MCP client; the update is applied the next time Visual Studio starts.", MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.Error(ex, "Error updating the MCP server");
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                McpUpdateInfoBar.Show($"Failed to update the Xygeni MCP server: {ex.Message}", new[] { ("Retry", "retry") }, action =>
+                {
+                    if (action == "retry") _ = UpdateMcpLibraryAsync();
+                }, warning: true);
             }
         }
 
-        public static async Task RunScan()
+        private static async Task ShowMcpMessageAsync(string message, MessageBoxImage image)
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            vs2026_pluginPackage.Instance?.Logger?.Log(message);
+            MessageBox.Show(message, "Xygeni MCP server", MessageBoxButton.OK, image);
+        }
+
+        public static Task RunScan() => RunScan(null);
+
+        /// <summary>Runs one scan type alone (the "Run ... scan only" node of a category in the explorer, #415).</summary>
+        public static Task RunScanOnly(string scanType) => RunScan(new[] { scanType });
+
+        private static async Task RunScan(IReadOnlyList<string> only)
         {
             if (!await EnsureLicenseAsync()) return;
 
@@ -63,7 +178,7 @@ namespace vs2026_plugin.Commands
 
             vs2026_pluginPackage.Instance?.Logger?.Show();
 
-            XygeniScannerService.GetInstance().RunAnalysisAsync(rootDir, scannerPath);
+            XygeniScannerService.GetInstance().RunAnalysisAsync(rootDir, scannerPath, only);
         }
 
         /// <summary>

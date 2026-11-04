@@ -8,6 +8,32 @@
              d:DesignHeight="420" d:DesignWidth="350">
 
     <UserControl.Resources>
+        <!-- A pill switch for the Scan configuration rows, like the VS Code extension and the IntelliJ plugin (#415). -->
+        <Style x:Key="SwitchCheckBox" TargetType="CheckBox">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid Width="30" Height="16" Background="Transparent">
+                            <Border x:Name="Track" CornerRadius="8" Background="#6B6B6B"/>
+                            <Ellipse x:Name="Knob" Width="12" Height="12" Fill="White" HorizontalAlignment="Left" Margin="2,0,0,0"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="{DynamicResource {x:Static vsshell:EnvironmentColors.AccentMediumBrushKey}}"/>
+                                <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right"/>
+                                <Setter TargetName="Knob" Property="Margin" Value="0,0,2,0"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Track" Property="Opacity" Value="0.4"/>
+                                <Setter TargetName="Knob" Property="Opacity" Value="0.6"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="StyledButton" TargetType="Button">
             <Setter Property="Background" Value="#2D2D30"/>
             <Setter Property="Foreground" Value="White"/>
@@ -135,6 +161,98 @@
                         LostFocus="AdditionalGlobalOptionsTxt_LostFocus"/>
                     <TextBlock Width="320" HorizontalAlignment="Left" TextWrapping="Wrap" Opacity="0.8"
                         Text="Placed before the scanner command, separated by spaces (e.g. -cop key=value). Leave empty unless Xygeni support asks for it. -q/--quiet (the extension reads the scanner output) and --api-key (the token comes from this configuration) are ignored."
+                        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                </StackPanel>
+            </Expander>
+
+            <!-- MCP server: shared install, version and updates (xygeni/xygeni-product-backlog#2382) -->
+            <Expander x:Name="McpExpander" Header="MCP Server"
+                IsExpanded="False" Margin="0,0,0,12"
+                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}">
+                <StackPanel Margin="0,6,0,0">
+                    <TextBlock Text="Installed in" Margin="0,0,0,3"
+                        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                    <TextBox x:Name="McpPathTxt" Margin="0,0,0,8" Width="320" HorizontalAlignment="Left" IsReadOnly="True"/>
+                    <TextBlock x:Name="McpStatusTxt" Width="320" HorizontalAlignment="Left" TextWrapping="Wrap" Margin="0,0,0,8"
+                        Text="not installed"
+                        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                    <TextBlock Text="MCP server updates" Margin="0,0,0,3"
+                        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                    <ComboBox x:Name="McpUpdateModeCmb" Margin="0,0,0,3" Width="320" HorizontalAlignment="Left"
+                        SelectionChanged="McpUpdateModeCmb_SelectionChanged">
+                        <ComboBoxItem Content="Notify me" Tag="notify"/>
+                        <ComboBoxItem Content="Update automatically" Tag="auto"/>
+                        <ComboBoxItem Content="Off" Tag="off"/>
+                    </ComboBox>
+                    <TextBlock Width="320" HorizontalAlignment="Left" TextWrapping="Wrap" Opacity="0.8" Margin="0,0,0,8"
+                        Text="The published version is checked once a day after the connection is validated. Notify me offers Update / Ignore this version; Update automatically installs it in the background. Restart your MCP client after an update so it loads the new JAR."
+                        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                    <WrapPanel>
+                        <Button x:Name="CheckMcpUpdatesBtn" Content="Check for updates" Width="130" Margin="0,0,10,0" Click="CheckMcpUpdatesBtn_Click" IsEnabled="False"/>
+                        <Button x:Name="CopyMcpConfigBtn" Content="Copy MCP config (JSON)" Width="160" Click="CopyMcpConfigBtn_Click" IsEnabled="False"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Expander>
+
+            <!-- Per-project scan configuration: which scan types run, full and on save (xygeni/xygeni-product-backlog#415) -->
+            <Expander x:Name="ScanConfigExpander" Header="Scan configuration"
+                IsExpanded="False" Margin="0,0,0,12" Expanded="ScanConfigExpander_Expanded"
+                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}">
+                <StackPanel Margin="0,6,0,0">
+                    <TextBlock x:Name="ScanConfigProjectTxt" Width="320" HorizontalAlignment="Left" TextWrapping="Wrap" Margin="0,0,0,6" Opacity="0.8"
+                        Text="Open a solution or folder to configure its scan."
+                        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                    <WrapPanel Margin="0,0,0,6">
+                        <Button x:Name="SelectAllScanTypesBtn" Content="Select all" Width="80" Margin="0,0,6,0" Click="SelectAllScanTypesBtn_Click"/>
+                        <Button x:Name="ClearScanTypesBtn" Content="Clear" Width="60" Margin="0,0,6,0" Click="ClearScanTypesBtn_Click"/>
+                        <Button x:Name="RestoreScanDefaultsBtn" Content="Restore defaults" Width="110" Margin="0,0,6,0" Click="RestoreScanDefaultsBtn_Click"/>
+                        <Button x:Name="OpenScanConfigBtn" Content="Open file" Width="70" Click="OpenScanConfigBtn_Click"/>
+                    </WrapPanel>
+                    <Grid x:Name="ScanConfigRows" Width="330" HorizontalAlignment="Left">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="24"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="64"/>
+                        </Grid.ColumnDefinitions>
+                    </Grid>
+                    <TextBlock Text="Excluded folders" Margin="0,10,0,3"
+                        ToolTip="Folders and patterns excluded from every scan, added to the scanner defaults (node_modules, target, dist…). Glob patterns: * file wildcard, ** any depth, &quot;path:&quot; prefix for a sub-project. Needs scanner 6.23 or later."
+                        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                    <ListBox x:Name="ExcludesList" Width="320" Height="64" HorizontalAlignment="Left" Margin="0,0,0,4"
+                        SelectionChanged="ExcludesList_SelectionChanged"/>
+                    <WrapPanel Margin="0,0,0,4">
+                        <TextBox x:Name="ExcludePatternTxt" Width="180" Margin="0,0,6,0" ToolTip="A glob pattern, e.g. **/fixtures/**"/>
+                        <Button x:Name="AddExcludePatternBtn" Content="Add" Width="50" Margin="0,0,6,0" Click="AddExcludePatternBtn_Click"/>
+                        <Button x:Name="AddExcludeFolderBtn" Content="Add folder…" Width="90" Margin="0,0,6,0" Click="AddExcludeFolderBtn_Click"/>
+                        <Button x:Name="RemoveExcludeBtn" Content="Remove" Width="60" Click="RemoveExcludeBtn_Click" IsEnabled="False"/>
+                    </WrapPanel>
+                    <!-- Scanner options (#415): a command-line-like field with autocompletion and validation; only the options
+                         in ScanOptions.Specs are accepted, the ones the extension sets itself are refused with the reason. -->
+                    <TextBlock Text="Scanner options" Margin="0,10,0,3"
+                        ToolTip="Options passed to xygeni scan in the full scan and on save. Type -- to see the ones the IDE can pass; the options the extension sets itself (--run, -o, excludes…) are refused."
+                        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                    <ListBox x:Name="OptionsList" Width="320" Height="64" HorizontalAlignment="Left" Margin="0,0,0,4"
+                        SelectionChanged="OptionsList_SelectionChanged"/>
+                    <Grid Width="320" HorizontalAlignment="Left" Margin="0,0,0,2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="OptionTxt" Grid.Column="0" Margin="0,0,6,0" ToolTip="--option=value  (type -- to see them)"
+                            TextChanged="OptionTxt_TextChanged" PreviewKeyDown="OptionTxt_PreviewKeyDown" LostKeyboardFocus="OptionTxt_LostKeyboardFocus"/>
+                        <Popup x:Name="OptionPopup" PlacementTarget="{Binding ElementName=OptionTxt}" Placement="Bottom" StaysOpen="True"
+                            Width="{Binding ActualWidth, ElementName=OptionTxt}">
+                            <ListBox x:Name="OptionSuggestions" MaxHeight="160" PreviewMouseLeftButtonUp="OptionSuggestions_PreviewMouseLeftButtonUp"/>
+                        </Popup>
+                        <Button x:Name="AddOptionBtn" Grid.Column="1" Content="Add" Width="50" Margin="0,0,6,0" Click="AddOptionBtn_Click" IsEnabled="False"/>
+                        <Button x:Name="RemoveOptionBtn" Grid.Column="2" Content="Remove" Width="60" Click="RemoveOptionBtn_Click" IsEnabled="False"/>
+                    </Grid>
+                    <TextBlock x:Name="OptionHintTxt" Width="320" HorizontalAlignment="Left" TextWrapping="Wrap" Opacity="0.8" Text=" " Margin="0,0,0,4"
+                        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                    <TextBlock Width="320" HorizontalAlignment="Left" TextWrapping="Wrap" Opacity="0.8" Margin="0,6,0,0"
+                        Text="Full scan: the scan types of Run Scan (SCA brings suspect dependencies; at least one is required). On save: only the scan types that can analyze just the changed files are offered, and a type must be in the full scan to run on save. Saved in .xygeni\ide.json at the project root, shared with the other Xygeni IDE plugins: commit it to share it with your team."
                         Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
                 </StackPanel>
             </Expander>

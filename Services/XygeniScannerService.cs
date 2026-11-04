@@ -23,6 +23,8 @@ namespace vs2026_plugin.Services
         public string Summary { get; set; }
         // Scan types from the `--run=` argument: the reports this scan rewrote. Null = unknown, re-read all.
         public IReadOnlyList<string> ScanTypes { get; set; }
+        // A full scan limited to the configured scan types (#415): the categories it did not run are dropped, not kept.
+        public bool FullScan { get; set; }
     }
 
     public class XygeniScannerService
@@ -40,24 +42,35 @@ namespace vs2026_plugin.Services
         private const int LicenseErrorExitCode = 127;
         private const int AnyIssueFoundExitCode = 128;
 
-        private readonly string[] _runAnalysisArgs = {
-            "scan",
-            "--run=deps,secrets,misconf,iac,suspectdeps,sast,malware,quality,apisec,ai",
-            "-f", "json",
-            "-o", XygeniCommands.ReportSuffix,
-            "--no-upload",
-            "--include-vulnerabilities"
-        };
+        // `scan --run=<types> [--incremental] -f json -o <suffix> --no-upload --include-vulnerabilities`; the scan
+        // types come from the project's `.xygeni/ide.json` (xygeni/xygeni-product-backlog#415).
+        // With `only`, a single scan type instead of the configured full scan (the "Run ... scan only" node of a category,
+        // #415). The scanner options of the file go after the excludes, each canonical entry (`--name=value`) as one argument.
+        private static string[] BuildScanArgs(ScanConfig config, bool incremental, IReadOnlyList<string> only = null)
+        {
+            var run = only != null && only.Count > 0 ? only : incremental ? config.OnSave : config.Scans;
+            var args = new List<string> { "scan", "--run=" + string.Join(",", run) };
+            if (incremental) args.Add("--incremental");
+            string excludeAdd = config.ExcludeAddArgument();
+            if (excludeAdd != null) args.Add(excludeAdd);
+            args.AddRange(ScanOptions.Normalize(config.Options));
+            args.AddRange(new[] { "-f", "json", "-o", XygeniCommands.ReportSuffix, "--no-upload", "--include-vulnerabilities" });
+            return args.ToArray();
+        }
 
-        private readonly string[] _runIncrementalAnalysisArgs = {
-            "scan",
-            "--run=secrets,iac,sast,malware",
-            "--incremental",
-            "-f", "json",
-            "-o", XygeniCommands.ReportSuffix,
-            "--no-upload",
-            "--include-vulnerabilities"
-        };
+        /// <summary>The scan types plus the ones that run with them (SCA brings suspect dependencies), in CLI order.</summary>
+        public static IReadOnlyList<string> WithCompanions(IEnumerable<string> types)
+        {
+            var all = new HashSet<string>(types);
+            foreach (var scanner in ScanConfig.Scanners)
+            {
+                if (scanner.RunsWith != null && all.Contains(scanner.RunsWith)) all.Add(scanner.Key);
+            }
+            return ScanConfig.AllScanTypes.Where(all.Contains).ToList();
+        }
+
+        /// <summary>Whether the on-save scan has anything to run for the project (#415).</summary>
+        public static bool HasOnSaveScanTypes(string sourceFolder) => ScanConfig.Load(sourceFolder).OnSave.Count > 0;
 
         private readonly string[] _runRectifyScaArgs = { "util", "rectify", "--sca" };
         private readonly string[] _runRectifySastArgs = { "util", "rectify", "--sast" };
@@ -106,9 +119,12 @@ namespace vs2026_plugin.Services
             return _scannerQueue.Count > 0 || _activeScannerCount > 0;
         }
 
-        public async Task RunAnalysisAsync(string sourceFolder, string xygeniScannerPath)
+        /// <summary>The configured full scan, or with <paramref name="only"/> just those scan types (the findings of the others are kept).</summary>
+        public async Task RunAnalysisAsync(string sourceFolder, string xygeniScannerPath, IReadOnlyList<string> only = null)
         {
             _exitCode = null;
+            bool fullScan = only == null || only.Count == 0;
+            string onlyNote = fullScan ? "" : string.Join(",", only) + " - ";
 
             var timestamp = DateTime.Now;
 
@@ -122,14 +138,15 @@ namespace vs2026_plugin.Services
             _logger.Log("=================================================");
             _logger.Log($"  Running scan on source folder: {sourceFolder}");
 
-            var scanTypes = GetScanTypes(_runAnalysisArgs);
-            var currentScan = new ScanResult { Timestamp = timestamp, Status = "running", IssuesFound = null, Summary = "", ScanTypes = scanTypes };
+            var runArgs = BuildScanArgs(ScanConfig.Load(sourceFolder), incremental: false, only: fullScan ? null : WithCompanions(only));
+            var scanTypes = GetScanTypes(runArgs);
+            var currentScan = new ScanResult { Timestamp = timestamp, Status = "running", IssuesFound = null, Summary = onlyNote.Trim(), ScanTypes = scanTypes, FullScan = fullScan };
             _scans.Add(currentScan);
             OnChanged();
 
             try
             {
-                int exitCode = await RunAnalysisCommandAsync(sourceFolder, xygeniScannerPath, _logger);
+                int exitCode = await RunAnalysisCommandAsync(sourceFolder, xygeniScannerPath, _logger, runArgs);
 
                 _logger.Log("  Scanner finished");
 
@@ -140,8 +157,9 @@ namespace vs2026_plugin.Services
                     Timestamp = timestamp,
                     Status = "completed",
                     IssuesFound = null,
-                    Summary = $"Duration: {totalTime:F2}s{LicenseNote(exitCode)}",
-                    ScanTypes = scanTypes
+                    Summary = $"{onlyNote}Duration: {totalTime:F2}s{LicenseNote(exitCode)}",
+                    ScanTypes = scanTypes,
+                    FullScan = fullScan
                 });
 
                 _exitCode = exitCode;
@@ -156,8 +174,9 @@ namespace vs2026_plugin.Services
                     Timestamp = timestamp,
                     Status = "failed",
                     IssuesFound = null,
-                    Summary = "",
-                    ScanTypes = scanTypes
+                    Summary = onlyNote.Trim(),
+                    ScanTypes = scanTypes,
+                    FullScan = fullScan
                 });
             }
             finally
@@ -166,11 +185,14 @@ namespace vs2026_plugin.Services
             }
         }
 
-        public async Task<int> RunAnalysisCommandAsync(string sourceFolder, string xygeniInstallPath, ILogger logger)
+        public Task<int> RunAnalysisCommandAsync(string sourceFolder, string xygeniInstallPath, ILogger logger) =>
+            RunAnalysisCommandAsync(sourceFolder, xygeniInstallPath, logger, BuildScanArgs(ScanConfig.Load(sourceFolder), incremental: false));
+
+        private async Task<int> RunAnalysisCommandAsync(string sourceFolder, string xygeniInstallPath, ILogger logger, string[] runArgs)
         {
             // args include -d sourceFolder.
 
-            var args = new List<string>(_runAnalysisArgs);
+            var args = new List<string>(runArgs);
             args.Add("-d");
             args.Add(sourceFolder);
 
@@ -196,14 +218,15 @@ namespace vs2026_plugin.Services
             _logger.Log("=================================================");
             _logger.Log($"  Running incremental scan on source folder: {sourceFolder}");
 
-            var scanTypes = GetScanTypes(_runIncrementalAnalysisArgs);
+            var runArgs = BuildScanArgs(ScanConfig.Load(sourceFolder), incremental: true);
+            var scanTypes = GetScanTypes(runArgs);
             var currentScan = new ScanResult { Timestamp = timestamp, Status = "running", IssuesFound = null, Summary = "incremental", ScanTypes = scanTypes };
             _scans.Add(currentScan);
             OnChanged();
 
             try
             {
-                int exitCode = await RunIncrementalAnalysisCommandAsync(sourceFolder, xygeniScannerPath, _logger);
+                int exitCode = await RunIncrementalAnalysisCommandAsync(sourceFolder, xygeniScannerPath, _logger, runArgs);
 
                 _logger.Log("  Incremental scanner finished");
 
@@ -242,9 +265,12 @@ namespace vs2026_plugin.Services
             }
         }
 
-        public async Task<int> RunIncrementalAnalysisCommandAsync(string sourceFolder, string xygeniInstallPath, ILogger logger)
+        public Task<int> RunIncrementalAnalysisCommandAsync(string sourceFolder, string xygeniInstallPath, ILogger logger) =>
+            RunIncrementalAnalysisCommandAsync(sourceFolder, xygeniInstallPath, logger, BuildScanArgs(ScanConfig.Load(sourceFolder), incremental: true));
+
+        private async Task<int> RunIncrementalAnalysisCommandAsync(string sourceFolder, string xygeniInstallPath, ILogger logger, string[] runArgs)
         {
-            var args = new List<string>(_runIncrementalAnalysisArgs);
+            var args = new List<string>(runArgs);
             args.Add("-d");
             args.Add(sourceFolder);
 
