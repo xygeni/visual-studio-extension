@@ -38,6 +38,18 @@ namespace vs2026_plugin.Commands
             Instance = new XygeniSettingsCommand(package, commandService);
         }
 
+        /// <summary>Opens Xygeni Settings from code (the "Show me how" of the MCP update note, #2382).</summary>
+        public static async Task ShowAsync()
+        {
+            var package = Instance?.package;
+            if (package == null) return;
+            ToolWindowPane window = await package.ShowToolWindowAsync(typeof(XygeniConfigurationToolView), 0, true, package.DisposalToken);
+            if (window == null || window.Frame == null)
+            {
+                throw new NotSupportedException("Cannot create tool window");
+            }
+        }
+
         private void Execute(object sender, EventArgs e)
         {
             this.package.JoinableTaskFactory.RunAsync(async delegate

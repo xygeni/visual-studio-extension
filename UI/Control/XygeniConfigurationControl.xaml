@@ -176,6 +176,32 @@
                     <TextBlock x:Name="McpStatusTxt" Width="320" HorizontalAlignment="Left" TextWrapping="Wrap" Margin="0,0,0,8"
                         Text="not installed"
                         Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                    <!-- After an update: what to do, in the user's words, until they say OK (#2382) -->
+                    <TextBlock x:Name="McpRestartNoteTxt" Width="320" HorizontalAlignment="Left" TextWrapping="Wrap" Margin="0,0,0,4"
+                        Foreground="#E54D4D" Visibility="Collapsed"/>
+                    <WrapPanel x:Name="McpRestartButtons" Margin="0,0,0,8" Visibility="Collapsed">
+                        <Button x:Name="McpRestartHowBtn" Content="Show me how" Width="100" Margin="0,0,10,0" Click="McpRestartHowBtn_Click"/>
+                        <Button x:Name="McpRestartOkBtn" Content="OK" Width="50" Click="McpRestartOkBtn_Click"/>
+                    </WrapPanel>
+                    <Expander x:Name="McpRestartGuide" Header="How to restart your AI assistant" IsExpanded="False" Margin="0,0,0,8" Visibility="Collapsed"
+                        Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}">
+                        <StackPanel Margin="12,4,0,0">
+                            <TextBlock Width="308" TextWrapping="Wrap" Margin="0,0,0,4" Text="An update only replaces the Xygeni MCP server file. The AI assistant that uses it keeps the old version loaded until it is restarted:"
+                                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                            <TextBlock Width="308" TextWrapping="Wrap" Margin="0,0,0,2" Text="• GitHub Copilot in VS Code: Command Palette → MCP: List Servers → xygeni → Restart. Or reload the VS Code window."
+                                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                            <TextBlock Width="308" TextWrapping="Wrap" Margin="0,0,0,2" Text="• Claude Code: type /mcp and reconnect xygeni. Or close Claude Code and open it again."
+                                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                            <TextBlock Width="308" TextWrapping="Wrap" Margin="0,0,0,2" Text="• Cursor: Settings → MCP → switch xygeni off and on. Or restart Cursor."
+                                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                            <TextBlock Width="308" TextWrapping="Wrap" Margin="0,0,0,2" Text="• Claude Desktop: quit the application and open it again."
+                                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                            <TextBlock Width="308" TextWrapping="Wrap" Margin="0,0,0,4" Text="• Any other assistant: close it and open it again. Its Xygeni configuration does not change."
+                                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                            <TextBlock Width="308" TextWrapping="Wrap" Opacity="0.8" Text="Not using an AI assistant with Xygeni yet? Nothing to do: the first start already loads the new version."
+                                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+                        </StackPanel>
+                    </Expander>
                     <TextBlock Text="MCP server updates" Margin="0,0,0,3"
                         Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
                     <ComboBox x:Name="McpUpdateModeCmb" Margin="0,0,0,3" Width="320" HorizontalAlignment="Left"
@@ -185,7 +211,7 @@
                         <ComboBoxItem Content="Off" Tag="off"/>
                     </ComboBox>
                     <TextBlock Width="320" HorizontalAlignment="Left" TextWrapping="Wrap" Opacity="0.8" Margin="0,0,0,8"
-                        Text="The published version is checked once a day after the connection is validated. Notify me offers Update / Ignore this version; Update automatically installs it in the background. Restart your MCP client after an update so it loads the new JAR."
+                        Text="The published version is checked once a day after the connection is validated. Notify me offers Update / Ignore this version; Update automatically installs it in the background. After an update, restart your AI assistant so it uses the new version."
                         Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
                     <WrapPanel>
                         <Button x:Name="CheckMcpUpdatesBtn" Content="Check for updates" Width="130" Margin="0,0,10,0" Click="CheckMcpUpdatesBtn_Click" IsEnabled="False"/>

@@ -35,6 +35,7 @@ namespace vs2026_plugin.Services
         // MCP server updates (xygeni/xygeni-product-backlog#2382): notify (default), auto or off, and an ignored version
         private const string McpUpdateModeKey = "McpUpdateMode";
         private const string McpIgnoredVersionKey = "McpIgnoredVersion";
+        private const string McpRestartPendingKey = "McpRestartPending";
         public const string McpUpdateNotify = "notify";
         public const string McpUpdateAuto = "auto";
         public const string McpUpdateOff = "off";
@@ -203,6 +204,19 @@ namespace vs2026_plugin.Services
         public void SaveMcpIgnoredVersion(string version)
         {
             GetWritableStore().SetString(CollectionPath, McpIgnoredVersionKey, (version ?? string.Empty).Trim());
+        }
+
+        /// <summary>Version installed by an update that the AI assistant has not loaded yet; null once the user said OK (#2382).</summary>
+        public string GetMcpRestartPending()
+        {
+            var store = _settingsManager.GetReadOnlySettingsStore(SettingsScope.UserSettings);
+            string version = store.CollectionExists(CollectionPath) ? store.GetString(CollectionPath, McpRestartPendingKey, string.Empty) : string.Empty;
+            return string.IsNullOrWhiteSpace(version) ? null : version;
+        }
+
+        public void SaveMcpRestartPending(string version)
+        {
+            GetWritableStore().SetString(CollectionPath, McpRestartPendingKey, (version ?? string.Empty).Trim());
         }
 
         /// <summary>The options placed before the scanner command (`xygeni &lt;options&gt; scan ...`).</summary>

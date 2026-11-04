@@ -118,16 +118,39 @@ namespace vs2026_plugin.UI.Control
             bool installed = _installerService.IsMcpLibraryInstalled();
             CheckMcpUpdatesBtn.IsEnabled = installed;
             CopyMcpConfigBtn.IsEnabled = installed && _installerService.IsInstalled;
+            string pending = installed ? _configurationService.GetMcpRestartPending() : null;
+            McpRestartNoteTxt.Visibility = pending != null ? Visibility.Visible : Visibility.Collapsed;
+            McpRestartButtons.Visibility = pending != null ? Visibility.Visible : Visibility.Collapsed;
+            McpRestartGuide.Visibility = pending != null ? Visibility.Visible : Visibility.Collapsed;
             if (!installed)
             {
-                McpStatusTxt.Text = "not installed (installed with the scanner by Save & Install)";
+                // Without a JAR, "checking" while the connection check (which installs it) runs; "not installed" otherwise.
+                McpStatusTxt.Text = _mcpChecking ? "Checking…" : "not installed (installed with the scanner by Save & Install)";
                 return;
             }
             string version = _installerService.GetMcpInstalledVersion() ?? "unknown (installed before version tracking; it is updated on the next check)";
             var check = _installerService.LastMcpUpdateCheck;
             string updates = check == null ? "not checked yet in this session"
                 : check.UpdateAvailable ? $"version {check.Available} is available" : "up to date";
-            McpStatusTxt.Text = $"Installed version: {version}. Updates: {updates}.";
+            McpStatusTxt.Text = $"Installed version: {version}. Updates: {updates}." + (pending != null ? " Restart your AI assistant." : "");
+            McpRestartNoteTxt.Text = pending != null ? $"Updated to {pending}. Restart your AI assistant (Copilot, Claude Code, Cursor…) so it uses the new version." : "";
+        }
+
+        // True from the start of a connection check until it ends: the MCP server is installed by that check.
+        private bool _mcpChecking;
+
+        private void McpRestartHowBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            McpExpander.IsExpanded = true;
+            McpRestartGuide.IsExpanded = true;
+            McpRestartGuide.BringIntoView();
+        }
+
+        private void McpRestartOkBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            XygeniCommands.DismissMcpRestart();
         }
 
         private void McpUpdateModeCmb_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -224,6 +247,7 @@ namespace vs2026_plugin.UI.Control
 
         private void UpdateStatusText()
         {
+            if (StatusTxt.Text != "Connecting…") _mcpChecking = false;
             UpdateMcpStatus();
             bool licensed = _licenseService.IsLicenseAvailable;
             bool isFree = _licenseService.IsFreeLicense();
@@ -712,6 +736,8 @@ namespace vs2026_plugin.UI.Control
 
             StatusTxt.Text = "Connecting…";
             StatusTxt.Foreground = new SolidColorBrush(Colors.Orange);
+            _mcpChecking = true;
+            UpdateMcpStatus();
             _ = Task.Run(async () =>
             {
                 try

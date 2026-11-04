@@ -114,6 +114,16 @@ namespace vs2026_plugin.Commands
             });
         }
 
+        /// <summary>What the user must do after an MCP update, in their words: the extension only replaces the JAR, the assistant owns the process.</summary>
+        public const string McpRestartNote = "Your AI assistant (Copilot, Claude Code, Cursor…) will use it the next time it starts: if it is open now, restart it.";
+
+        /// <summary>The user restarted (or never had running) the AI assistant: the "restart pending" note goes away.</summary>
+        public static void DismissMcpRestart()
+        {
+            XygeniConfigurationService.GetInstance().SaveMcpRestartPending(null);
+            XygeniInstallerService.GetInstance().NotifyMcpStateChanged();
+        }
+
         /// <summary>Downloads the published MCP server over the installed one and says when it is loaded.</summary>
         public static async Task UpdateMcpLibraryAsync()
         {
@@ -126,7 +136,17 @@ namespace vs2026_plugin.Commands
                 string version = installer.GetMcpInstalledVersion() ?? "the published version";
                 if (outcome == XygeniInstallerService.McpDownloadOutcome.Installed)
                 {
-                    await ShowMcpMessageAsync($"Xygeni MCP server updated to {version}. Restart your MCP client to load it.", MessageBoxImage.Information);
+                    // The note stays in Xygeni Settings until the user says OK: the extension only replaced the JAR,
+                    // the AI assistant that runs it keeps the old one until restarted.
+                    XygeniConfigurationService.GetInstance().SaveMcpRestartPending(version);
+                    installer.NotifyMcpStateChanged();
+                    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                    McpUpdateInfoBar.Show($"Xygeni MCP server updated to {version}. {McpRestartNote}",
+                        new[] { ("Show me how", "how"), ("OK", "ok") }, action =>
+                        {
+                            if (action == "ok") DismissMcpRestart();
+                            else if (action == "how") _ = XygeniSettingsCommand.ShowAsync();
+                        });
                 }
                 else
                 {

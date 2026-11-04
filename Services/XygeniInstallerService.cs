@@ -810,6 +810,9 @@ namespace vs2026_plugin.Services
             return webProxy;
         }
 
+        /// <summary>The MCP server was installed, updated or its restart note dismissed: the views repaint (#2382).</summary>
+        public void NotifyMcpStateChanged() => OnChanged();
+
         private void OnChanged()
         {
             Changed?.Invoke(this, EventArgs.Empty);
