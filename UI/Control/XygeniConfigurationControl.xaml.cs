@@ -93,6 +93,7 @@ namespace vs2026_plugin.UI.Control
             AutoScanChk.IsChecked = _configurationService.GetAutoScan();
 
             SkipSslVerifyChk.IsChecked = _configurationService.GetSkipSslVerify();
+                AllowInsecureHttpChk.IsChecked = _configurationService.GetAllowInsecureHttp();
             SkipUpdateChk.IsChecked = _configurationService.GetSkipUpdate();
             VerboseChk.IsChecked = _configurationService.GetVerbose();
             AdditionalGlobalOptionsTxt.Text = _configurationService.GetAdditionalGlobalOptions();
@@ -214,10 +215,17 @@ namespace vs2026_plugin.UI.Control
             {
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
                 SkipSslVerifyChk.IsChecked = _configurationService.GetSkipSslVerify();
+                AllowInsecureHttpChk.IsChecked = _configurationService.GetAllowInsecureHttp();
             });
         }
 
         // Click (not Checked/Unchecked): only the user's own clicks, not the programmatic refreshes above.
+        private void AllowInsecureHttpChk_Click(object sender, RoutedEventArgs e)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            _configurationService.SaveAllowInsecureHttp(AllowInsecureHttpChk.IsChecked ?? false);
+        }
+
         private void SkipSslVerifyChk_Click(object sender, RoutedEventArgs e)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
@@ -267,7 +275,7 @@ namespace vs2026_plugin.UI.Control
 
             if (_installerService.IsInstalled)
             {
-                StatusTxt.Text = "installed";
+                StatusTxt.Text = "installed" + (InsecureUrl.IsInsecureRemote(_configurationService.GetUrl()) ? " (" + InsecureUrl.Warning + ")" : "");
                 StatusTxt.Foreground = new SolidColorBrush(Colors.Green);
                 RunScanBtn.IsEnabled = true;
                 AutoScanChk.IsEnabled = !isFree;
@@ -745,7 +753,7 @@ namespace vs2026_plugin.UI.Control
                     if (!await _installerService.IsValidApiUrlAsync(apiUrl))
                     {
                         await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                        StatusTxt.Text = "API URL not valid";
+                        StatusTxt.Text = _installerService.LastConnectionProblem == InsecureUrl.Refused ? InsecureUrl.Refused : "API URL not valid";
                         RunScanBtn.IsEnabled = false;
                         return;
                     }

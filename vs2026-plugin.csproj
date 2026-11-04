@@ -94,6 +94,7 @@
     <Compile Include="Services\McpUpdateInfoBar.cs" />
     <Compile Include="Services\ScanConfig.cs" />
     <Compile Include="Services\ScanOptions.cs" />
+    <Compile Include="Services\InsecureUrl.cs" />
     <Compile Include="Editor\XygeniIssueErrorTagger.cs" />
     <Compile Include="Editor\XygeniDocumentSaveListener.cs" />
     <Compile Include="UI\Window\IssueDetailsToolWindow.cs" />

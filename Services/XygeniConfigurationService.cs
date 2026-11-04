@@ -29,6 +29,7 @@ namespace vs2026_plugin.Services
         private const string AutoScanKey = "AutoScan";
         // Scanner global options, placed before the command: xygeni <options> scan ... (xygeni/tech-support#378)
         private const string SkipSslVerifyKey = "ScannerSkipSslVerify";
+        private const string AllowInsecureHttpKey = "AllowInsecureHttp";
         private const string SkipUpdateKey = "ScannerSkipUpdate";
         private const string VerboseKey = "ScannerVerbose";
         private const string AdditionalGlobalOptionsKey = "ScannerAdditionalGlobalOptions";
@@ -160,6 +161,9 @@ namespace vs2026_plugin.Services
         }
 
         public bool GetSkipSslVerify() { return GetBoolean(SkipSslVerifyKey); }
+        /// <summary>"Allow insecure HTTP": an http server URL to a non-loopback host is refused unless this is on (#1438).</summary>
+        public bool GetAllowInsecureHttp() { return GetBoolean(AllowInsecureHttpKey); }
+        public void SaveAllowInsecureHttp(bool value) { GetWritableStore().SetBoolean(CollectionPath, AllowInsecureHttpKey, value); }
         public void SaveSkipSslVerify(bool value) { GetWritableStore().SetBoolean(CollectionPath, SkipSslVerifyKey, value); }
 
         public bool GetSkipUpdate() { return GetBoolean(SkipUpdateKey); }

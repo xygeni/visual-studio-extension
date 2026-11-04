@@ -130,6 +130,14 @@
                 <Run Text="." />
             </TextBlock>
 
+            <!-- Opt-in for an http server URL to a host other than localhost; without it such a URL is refused (#1438) -->
+            <CheckBox x:Name="AllowInsecureHttpChk"
+                Content="Allow insecure HTTP (token sent in clear)"
+                ToolTip="Only for a Xygeni server without TLS: with an http URL to a host other than localhost the API token travels in clear on every request. http://localhost is always allowed."
+                Margin="0,0,0,10"
+                Click="AllowInsecureHttpChk_Click"
+                Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
+
             <!-- Scanner global options, placed before the command: xygeni <options> scan ... (xygeni/tech-support#378) -->
             <CheckBox x:Name="SkipSslVerifyChk"
                 Content="Skip SSL verification (--skip-ssl-verify)"

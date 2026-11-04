@@ -662,6 +662,18 @@ namespace vs2026_plugin.Services
 
         public async Task<bool> IsValidApiUrlAsync(string xygeniApiUrl)
         {
+            // An http URL to a non-loopback host would send the token in clear: refused before any request (#1438).
+            string insecureProblem = InsecureUrl.Problem(xygeniApiUrl, XygeniConfigurationService.GetInstance().GetAllowInsecureHttp());
+            if (insecureProblem != null)
+            {
+                _logger?.Log($"  {insecureProblem}");
+                LastConnectionProblem = insecureProblem;
+                return false;
+            }
+            if (InsecureUrl.IsInsecureRemote(xygeniApiUrl))
+            {
+                _logger?.Log($"  WARNING: {InsecureUrl.Warning} ({xygeniApiUrl}); allowed by the settings");
+            }
             string pingUrl = $"{xygeniApiUrl.TrimEnd('/')}/ping";
             // A backend that is starting (a local one, a deploy) answers 5xx or refuses the connection for a few
             // seconds: retry before calling it disconnected, so the user does not have to click to reconnect.
