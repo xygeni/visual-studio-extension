@@ -108,7 +108,11 @@ namespace vs2026_plugin.Services
                     task.Navigate += OnNavigate;
                     _errorListProvider.Tasks.Add(task);
 
-                    issueLocations.Add(CreateIssueLocation(issue, task.Document));
+                    // Editor squiggles need a line; location-less findings still get their Error List row.
+                    if (issue.HasLocation)
+                    {
+                        issueLocations.Add(CreateIssueLocation(issue, task.Document));
+                    }
                 }
             }
             finally
@@ -123,49 +127,46 @@ namespace vs2026_plugin.Services
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            try
+            var errorTask = sender as ErrorTask;
+            if (errorTask == null || !_taskIssueMap.TryGetValue(errorTask, out var issue))
             {
-                var errorTask = sender as ErrorTask;
-                if (errorTask == null || string.IsNullOrEmpty(errorTask.Document))
-                {
-                    return;
-                }
-
-                var dte = ServiceProvider.GlobalProvider.GetService(typeof(DTE)) as DTE;
-                if (dte == null)
-                {
-                    return;
-                }
-
-                if (!File.Exists(errorTask.Document))
-                {
-                    return;
-                }
-
-                var window = dte.ItemOperations.OpenFile(errorTask.Document);
-                if (window != null)
-                {
-                    var selection = dte.ActiveDocument?.Selection as TextSelection;
-                    if (selection != null)
-                    {
-                        selection.GotoLine(errorTask.Line + 1, true);
-                    }
-                }
-
-                // Open issue details panel for the navigated issue
-                _taskIssueMap.TryGetValue(errorTask, out var issue);
-                if (issue != null)
-                {
-                    ThreadHelper.JoinableTaskFactory.RunAsync(async delegate
-                    {
-                        await IssueDetailsService.GetInstance().ShowIssueDetailsAsync(issue);
-                    });
-                }
+                return;
             }
-            catch (Exception ex)
+
+            // Same order as the explorer: details first, then the editor when the finding has a document.
+            ThreadHelper.JoinableTaskFactory.RunAsync(async delegate
             {
-                _logger?.Error(ex, "Error navigating from Xygeni Error List");
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                try
+                {
+                    await IssueDetailsService.GetInstance().ShowIssueDetailsAsync(issue);
+                    OpenDocument(errorTask);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.Error(ex, "Error navigating from Xygeni Error List");
+                }
+            });
+        }
+
+        private static void OpenDocument(ErrorTask errorTask)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            if (string.IsNullOrEmpty(errorTask.Document) || !File.Exists(errorTask.Document))
+            {
+                return;
             }
+
+            var dte = ServiceProvider.GlobalProvider.GetService(typeof(DTE)) as DTE;
+            var window = dte?.ItemOperations.OpenFile(errorTask.Document);
+            if (window == null)
+            {
+                return;
+            }
+
+            var selection = dte.ActiveDocument?.Selection as TextSelection;
+            selection?.GotoLine(errorTask.Line + 1, true);
         }
 
 
