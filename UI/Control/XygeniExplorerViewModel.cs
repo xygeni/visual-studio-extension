@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -51,6 +52,14 @@ namespace vs2026_plugin.UI.Control
         {
              ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
             {
+                // The scan types of .xygeni\ide.json, read off the UI thread; null when there is no solution root.
+                List<string> configuredScans = null;
+                try
+                {
+                    string root = await XygeniConfigurationService.GetInstance().GetRootDirectoryAsync();
+                    if (!string.IsNullOrEmpty(root)) configuredScans = ScanConfig.Load(root).Scans.ToList();
+                }
+                catch (Exception) { }
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
                 RootItems.Clear();
 
@@ -77,25 +86,30 @@ namespace vs2026_plugin.UI.Control
                     IsExpanded = true
                 };
 
-                var categories = _issueService.GetIssues()
+                var issuesByCategory = _issueService.GetIssues()
                     .GroupBy(categoryIssue => categoryIssue.CategoryName)
-                    .OrderBy(categoryGroup => categoryGroup.Key);
-
-                foreach (var group in categories)
+                    .ToDictionary(categoryGroup => categoryGroup.Key, categoryGroup => categoryGroup.ToList());
+                // Every known category is listed, with findings or not, so each one can be run alone (#415), like
+                // the per-view play of the other plugins; a category switched off in Scan configuration says so.
+                var categoryNames = KnownCategories.Concat(issuesByCategory.Keys).Distinct().OrderBy(name => name);
+                foreach (string categoryName in categoryNames)
                 {
+                    var categoryIssues = issuesByCategory.TryGetValue(categoryName, out var found) ? found : new List<IXygeniIssue>();
+                    string scanType = GetCategoryScanType(categoryName);
+                    bool inScanConfig = scanType == null || configuredScans == null || configuredScans.Contains(scanType);
+                    string count = categoryIssues.Count == 0 && !inScanConfig ? "Not in the scan configuration" : categoryIssues.Count.ToString();
                     var catNode = new TreeNodeData(
-                        $"{group.Key} ({group.Count()})",
-                        GetCategoryIcon(group.Key),
-                        group
+                        $"{categoryName} ({count})",
+                        GetCategoryIcon(categoryName),
+                        categoryIssues
                     );
                     // First child: runs this scan type alone, keeping the findings of the other categories (#415).
-                    string scanType = GetCategoryScanType(group.Key);
                     if (scanType != null)
                     {
-                        catNode.Items.Add(new TreeNodeData($"Run {group.Key} scan only", GetIconPath("play.png"), new RunCategoryScan(scanType)));
+                        catNode.Items.Add(new TreeNodeData($"Run {categoryName} scan only", GetIconPath("play.png"), new RunCategoryScan(scanType)));
                     }
 
-                    foreach (var issue in group.OrderBy(categoryIssue => categoryIssue.GetSeverityLevel()))
+                    foreach (var issue in categoryIssues.OrderBy(categoryIssue => categoryIssue.GetSeverityLevel()))
                     {
                         // Service/module-scoped API flaws resolve to a file without a line, or to no file at all.
                         string locationSuffix = string.IsNullOrEmpty(issue.File) ? "" : $" - {Path.GetFileName(issue.File)}";
@@ -129,6 +143,9 @@ namespace vs2026_plugin.UI.Control
         }
 
         
+
+        /// <summary>The categories of the explorer, in the order of the scanners; the ones GetCategoryScanType knows.</summary>
+        private static readonly string[] KnownCategories = { "SCA", "SAST", "Code Quality", "Misconfigurations", "Secrets", "IaC", "API Security", "AI Security", "Malware" };
 
         /// <summary>Category name of the explorer → the <c>--run</c> scan type that feeds it.</summary>
         private static string GetCategoryScanType(string categoryName)

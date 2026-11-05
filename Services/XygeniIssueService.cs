@@ -25,6 +25,8 @@ namespace vs2026_plugin.Services
         private bool _pendingReadIssues = false;
         // Scan types of the reads deferred while another read runs; null = one of them was a full read.
         private IReadOnlyList<string> _pendingScanTypes;
+        /// <summary>A full scan that ran while a read was in progress drops the categories it did not run, like a direct one.</summary>
+        private bool _pendingDropAllCategories;
 
         public event EventHandler IssuesChanged;
 
@@ -109,6 +111,7 @@ namespace vs2026_plugin.Services
                 if (_isReadingIssues)
                 {
                     _pendingScanTypes = _pendingReadIssues ? MergeScanTypes(_pendingScanTypes, scanTypes) : scanTypes;
+                    _pendingDropAllCategories = (_pendingReadIssues && _pendingDropAllCategories) || dropAllCategories;
                     _pendingReadIssues = true;
                     _logger.Log("  Issues are already being read, scheduling a refresh...");
                     return;
@@ -144,8 +147,10 @@ namespace vs2026_plugin.Services
                 {
                     _pendingReadIssues = false;
                     var pendingScanTypes = _pendingScanTypes;
+                    bool pendingDropAll = _pendingDropAllCategories;
                     _pendingScanTypes = null;
-                    _ = ReadIssuesAsync(pendingScanTypes);
+                    _pendingDropAllCategories = false;
+                    _ = ReadIssuesAsync(pendingScanTypes, pendingDropAll);
                 }
             }
         }

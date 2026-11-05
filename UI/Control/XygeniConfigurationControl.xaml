@@ -238,7 +238,6 @@
                         Foreground="{DynamicResource {x:Static vsshell:EnvironmentColors.ToolWindowTextBrushKey}}"/>
                     <WrapPanel Margin="0,0,0,6">
                         <Button x:Name="SelectAllScanTypesBtn" Content="Select all" Width="80" Margin="0,0,6,0" Click="SelectAllScanTypesBtn_Click"/>
-                        <Button x:Name="ClearScanTypesBtn" Content="Clear" Width="60" Margin="0,0,6,0" Click="ClearScanTypesBtn_Click"/>
                         <Button x:Name="RestoreScanDefaultsBtn" Content="Restore defaults" Width="110" Margin="0,0,6,0" Click="RestoreScanDefaultsBtn_Click"/>
                         <Button x:Name="OpenScanConfigBtn" Content="Open file" Width="70" Click="OpenScanConfigBtn_Click"/>
                     </WrapPanel>

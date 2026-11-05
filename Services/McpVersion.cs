@@ -57,7 +57,7 @@ namespace vs2026_plugin.Services
         public static string FromVersionFile(string content)
         {
             if (content == null) return null;
-            string line = content.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0);
+            string line = content.Split('\n').Select(entry => entry.Trim()).FirstOrDefault(entry => entry.Length > 0);
             if (line == null || Parse(line) == null) return null;
             return line.StartsWith("v") ? line.Substring(1) : line;
         }

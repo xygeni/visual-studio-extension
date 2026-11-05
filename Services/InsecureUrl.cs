@@ -19,7 +19,7 @@ namespace vs2026_plugin.Services
         {
             if (string.IsNullOrWhiteSpace(hostname)) return false;
             string host = hostname.Trim().ToLowerInvariant().TrimStart('[').TrimEnd(']');
-            return host == "localhost" || host.EndsWith(".localhost") || host == "127.0.0.1" || host.StartsWith("127.")
+            return host == "localhost" || host.EndsWith(".localhost") || System.Text.RegularExpressions.Regex.IsMatch(host, @"^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$") /* the 127/8 block as an address; 127.example.com is a DNS name */
                 || host == "::1" || host == "0:0:0:0:0:0:0:1";
         }
 

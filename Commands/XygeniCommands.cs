@@ -57,7 +57,13 @@ namespace vs2026_plugin.Commands
             var logger = vs2026_pluginPackage.Instance?.Logger;
             var config = XygeniConfigurationService.GetInstance();
             string mode = config.GetMcpUpdateMode();
-            if (!force && mode == XygeniConfigurationService.McpUpdateOff) return;
+            if (!force && mode == XygeniConfigurationService.McpUpdateOff)
+            {
+                // No check, but a download kept as .pending (JAR locked at the time) is still applied on this start (MCP.md).
+                try { await XygeniInstallerService.GetInstance().ApplyPendingMcpUpdateAsync().ConfigureAwait(false); }
+                catch (Exception ex) { logger?.Error(ex, "Pending MCP server update"); }
+                return;
+            }
 
             XygeniInstallerService.McpUpdateCheck result;
             try
@@ -150,8 +156,8 @@ namespace vs2026_plugin.Commands
                 }
                 else
                 {
-                    await ShowMcpMessageAsync("The Xygeni MCP server update was downloaded but the installed JAR is in use. "
-                        + "Close your MCP client; the update is applied the next time Visual Studio starts.", MessageBoxImage.Warning);
+                    await ShowMcpMessageAsync("The Xygeni MCP server update was downloaded, but your AI assistant (Copilot, Claude Code, Cursor…) "
+                        + "is still using the installed version: close it. The update is applied the next time Visual Studio starts.", MessageBoxImage.Warning);
                 }
             }
             catch (Exception ex)

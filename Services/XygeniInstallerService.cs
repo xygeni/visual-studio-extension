@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Net;
@@ -100,16 +101,28 @@ namespace vs2026_plugin.Services
         private const int MinScannerJars = 50;
         private bool _scannerMigrationChecked;
 
+        /// <summary>The .jar files under <c>&lt;dir&gt;\lib</c>; 0 when the folder is missing.</summary>
+        private static int CountScannerJars(string dir)
+        {
+            string lib = Path.Combine(dir, "lib");
+            return Directory.Exists(lib) ? Directory.GetFiles(lib, "*.jar").Length : 0;
+        }
+
         private void MigrateExtensionScanner(string fixedDir)
         {
             if (_scannerMigrationChecked) return;
             _scannerMigrationChecked = true;
             try
             {
-                if (Directory.Exists(fixedDir) && Directory.GetFiles(Path.Combine(fixedDir, "lib"), "*.jar").Length >= MinScannerJars) return;
-                string legacy = Path.Combine(_extensionPath, ".xygeni");
-                if (!Directory.Exists(legacy) || !Directory.Exists(Path.Combine(legacy, "lib"))) return;
-                if (Directory.GetFiles(Path.Combine(legacy, "lib"), "*.jar").Length < MinScannerJars) return;
+                if (CountScannerJars(fixedDir) >= MinScannerJars) return;
+                // Visual Studio gives every extension version its own folder: the scanner of the previous version
+                // is in a sibling of this one, so the siblings are searched too (as for the legacy MCP copies).
+                var candidateFolders = new List<string> { _extensionPath };
+                string extensionsDir = Path.GetDirectoryName(_extensionPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                if (!string.IsNullOrEmpty(extensionsDir) && Directory.Exists(extensionsDir)) candidateFolders.AddRange(Directory.GetDirectories(extensionsDir));
+                string legacy = candidateFolders.Select(folder => Path.Combine(folder, ".xygeni"))
+                    .FirstOrDefault(folder => CountScannerJars(folder) >= MinScannerJars);
+                if (legacy == null) return;
                 Directory.CreateDirectory(Path.GetDirectoryName(fixedDir));
                 if (Directory.Exists(fixedDir)) Directory.Delete(fixedDir, true);
                 Directory.Move(legacy, fixedDir);
@@ -262,7 +275,7 @@ namespace vs2026_plugin.Services
                 bool movedFromLegacyPath = await DownloadMCPLibraryAsync(force).ConfigureAwait(false);
                 if (movedFromLegacyPath)
                 {
-                    string message = $"The Xygeni MCP server moved to {GetMcpLibraryPath()}. Update the path in your MCP client configuration.";
+                    string message = $"The Xygeni MCP server moved to {GetMcpLibraryPath()}. Update the path in your AI assistant's MCP configuration.";
                     _logger.Log(message);
                     await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
                     VsShellUtilities.ShowMessageBox(ServiceProvider.GlobalProvider, message, "Xygeni MCP server",
@@ -413,7 +426,7 @@ namespace vs2026_plugin.Services
                 TryDeleteFile(pendingPath);
                 File.Move(temporaryPath, pendingPath);
                 WriteVersionFile(Path.Combine(installMcpPath, McpPendingVersionFileName), remoteVersion);
-                _logger.Log($"  Could not replace {mcpLibraryPath} ({ex.Message}). Close your MCP client; the update is applied on the next start.");
+                _logger.Log($"  Could not replace {mcpLibraryPath} ({ex.Message}): an AI assistant is still using it. The update is applied on the next start.");
                 return McpDownloadOutcome.Pending;
             }
             WriteVersionFile(Path.Combine(installMcpPath, McpVersionFileName), remoteVersion);
@@ -430,14 +443,7 @@ namespace vs2026_plugin.Services
         {
             if (!IsMcpLibraryInstalled()) return new McpUpdateCheck { Status = McpUpdateStatus.NotInstalled };
             string installMcpPath = GetMcpLibraryInstallationDir();
-            if (File.Exists(Path.Combine(installMcpPath, McpPendingLibraryName)))
-            {
-                await WithMcpLockAsync(installMcpPath, () =>
-                {
-                    ApplyPendingMcpUpdateLocked();
-                    return Task.CompletedTask;
-                }).ConfigureAwait(false);
-            }
+            await ApplyPendingMcpUpdateAsync().ConfigureAwait(false);
             if (!force && !IsMcpCheckDue()) return new McpUpdateCheck { Status = McpUpdateStatus.Skipped };
 
             string available = McpVersion.FromVersionFile(await FetchTextAsync(XygeniMCPVersionUrl).ConfigureAwait(false));
@@ -460,7 +466,29 @@ namespace vs2026_plugin.Services
             return check;
         }
 
-        // Puts a .pending download in place once the MCP client that locked the JAR is gone. Under the MCP lock.
+        /// <summary>
+        /// Puts a .pending download in place when the JAR is no longer locked, whatever the update mode: the download
+        /// already happened, only the file swap was waiting (MCP.md). Nothing to do without a .pending.
+        /// </summary>
+        public async Task ApplyPendingMcpUpdateAsync()
+        {
+            if (!IsMcpLibraryInstalled()) return;
+            string installMcpPath = GetMcpLibraryInstallationDir();
+            if (!File.Exists(Path.Combine(installMcpPath, McpPendingLibraryName))) return;
+            bool applied = false;
+            await WithMcpLockAsync(installMcpPath, () =>
+            {
+                applied = ApplyPendingMcpUpdateLocked();
+                return Task.CompletedTask;
+            }).ConfigureAwait(false);
+            if (applied)
+            {
+                // The assistant that locked the JAR may still be running the old version: same note as after an update.
+                XygeniConfigurationService.GetInstance().SaveMcpRestartPending(GetMcpInstalledVersion());
+                OnChanged();
+            }
+        }
+
         private bool ApplyPendingMcpUpdateLocked()
         {
             string installMcpPath = GetMcpLibraryInstallationDir();
@@ -475,7 +503,7 @@ namespace vs2026_plugin.Services
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
             {
-                _logger.Log($"  Pending Xygeni MCP server update not applied yet, the JAR is still in use: {ex.Message}");
+                _logger.Log($"  Pending Xygeni MCP server update not applied yet, an AI assistant is still using the JAR: {ex.Message}");
                 return false;
             }
             string pendingVersion = McpVersion.FromVersionFile(ReadTextOrNull(pendingVersionPath));
@@ -662,6 +690,8 @@ namespace vs2026_plugin.Services
 
         public async Task<bool> IsValidApiUrlAsync(string xygeniApiUrl)
         {
+            // Recomputed on every check: a problem of a previous URL (or before "Allow insecure HTTP") must not stick.
+            LastConnectionProblem = null;
             // An http URL to a non-loopback host would send the token in clear: refused before any request (#1438).
             string insecureProblem = InsecureUrl.Problem(xygeniApiUrl, XygeniConfigurationService.GetInstance().GetAllowInsecureHttp());
             if (insecureProblem != null)

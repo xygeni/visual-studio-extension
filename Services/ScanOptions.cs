@@ -19,7 +19,7 @@ namespace vs2026_plugin.Services
 
         public sealed class Spec
         {
-            /// <summary>Long name, with the dashes (<c>--run-languages</c>).</summary>
+            /// <summary>Long name, with the dashes (<c>--ai-review</c>).</summary>
             public string Name { get; }
             public Kind Kind { get; }
             /// <summary>One line, as in the CLI help.</summary>
@@ -36,22 +36,20 @@ namespace vs2026_plugin.Services
             }
         }
 
-        private static readonly string[] Languages = { "csharp", "go", "html", "java", "javascript", "kotlin", "php", "python", "swift", "typescript" };
         private static readonly string[] Severities = { "critical", "high", "low", "info" };
 
         /// <summary>The options offered, in the order of the autocompletion.</summary>
+        // Only options of `xygeni scan` itself: `--run-languages` / `--skip-languages` belong to `xygeni sast` and `xygeni quality`, and `scan` refuses them with "Unknown option" (exit 2).
         public static readonly IReadOnlyList<Spec> Specs = new[]
         {
-            new Spec("--run-languages", Kind.List, "Languages to analyze (SAST, Code Quality); all if not set", Languages, closed: true, placeholder: "java,typescript"),
-            new Spec("--skip-languages", Kind.List, "Languages to leave out of the analysis", Languages, closed: true, placeholder: "html"),
             new Spec("--include", Kind.List, "Include patterns, comma-separated (glob, ** at any depth)", placeholder: "src/**"),
             new Spec("--detectors", Kind.Text, "Detectors to include per scan: <scan>=<ids, a severity or all>, | between scans", placeholder: "secrets=high|iac=all"),
             new Spec("--skip-detectors", Kind.Text, "Detectors to leave out per scan, same syntax as --detectors", placeholder: "sast=hardcoded_password"),
             new Spec("--mute", Kind.Path, "Mute descriptor file (.xygeni.mute.yml) or #name of a named profile", placeholder: ".xygeni.mute.yml"),
             new Spec("--standard", Kind.Text, "ID of the compliance standard to check", placeholder: "owasp-top10"),
-            new Spec("--ai-review", Kind.Enum, "Which findings an AI agent reviews (needs an AI agent configured)", new[] { "off", "all", "ai-detected" }),
-            new Spec("--ai-review-filter", Kind.List, "Findings the AI review looks at: a severity (that one and higher), detector IDs, !<id> to leave one out, or all", Severities, placeholder: "high,!sql_injection"),
-            new Spec("--ai-mode", Kind.Enum, "Convention profile of the application before analyzing it (needs an AI agent configured)", new[] { "off", "auto", "stored", "rebuild" }),
+            new Spec("--ai-review", Kind.Enum, "Which findings an AI agent reviews (needs an AI agent configured; scanner 6.23 or later)", new[] { "off", "all", "ai-detected" }),
+            new Spec("--ai-review-filter", Kind.List, "Findings the AI review looks at: a severity (that one and higher), detector IDs, !<id> to leave one out, or all (scanner 6.23 or later)", Severities, placeholder: "high,!sql_injection"),
+            new Spec("--ai-mode", Kind.Enum, "Convention profile of the application before analyzing it (needs an AI agent configured; scanner 6.23 or later)", new[] { "off", "auto", "stored", "rebuild" }),
             new Spec("--include-license-analysis", Kind.Flag, "Evaluate the licenses of the components (SCA)"),
             new Spec("--conf", Kind.Path, "Scan configuration file template (the filename is prefixed with SCAN.)", placeholder: "conf/custom.yml"),
             new Spec("--custom-detectors-dir", Kind.Path, "Directory with custom detectors", placeholder: ".xygeni/detectors"),

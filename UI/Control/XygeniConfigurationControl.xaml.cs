@@ -93,7 +93,7 @@ namespace vs2026_plugin.UI.Control
             AutoScanChk.IsChecked = _configurationService.GetAutoScan();
 
             SkipSslVerifyChk.IsChecked = _configurationService.GetSkipSslVerify();
-                AllowInsecureHttpChk.IsChecked = _configurationService.GetAllowInsecureHttp();
+            AllowInsecureHttpChk.IsChecked = _configurationService.GetAllowInsecureHttp();
             SkipUpdateChk.IsChecked = _configurationService.GetSkipUpdate();
             VerboseChk.IsChecked = _configurationService.GetVerbose();
             AdditionalGlobalOptionsTxt.Text = _configurationService.GetAdditionalGlobalOptions();
@@ -199,7 +199,7 @@ namespace vs2026_plugin.UI.Control
             try
             {
                 Clipboard.SetText(config.ToString(Newtonsoft.Json.Formatting.Indented));
-                MessageBox.Show("MCP server configuration copied to the clipboard. Paste it into your MCP client configuration (mcp.json)."
+                MessageBox.Show("MCP server configuration copied to the clipboard. Paste it into your AI assistant's MCP configuration (mcp.json)."
                     + (string.IsNullOrEmpty(token) ? " Replace $XYGENI_TOKEN with your token." : " It contains your Xygeni token: keep that file private."),
                     "Xygeni MCP server", MessageBoxButton.OK, MessageBoxImage.Information);
             }
@@ -315,7 +315,7 @@ namespace vs2026_plugin.UI.Control
             _scanConfigRoot = string.IsNullOrEmpty(root) ? null : root;
             var config = ScanConfig.Load(_scanConfigRoot);
             bool hasProject = _scanConfigRoot != null;
-            foreach (var button in new[] { SelectAllScanTypesBtn, ClearScanTypesBtn, RestoreScanDefaultsBtn, OpenScanConfigBtn })
+            foreach (var button in new[] { SelectAllScanTypesBtn, RestoreScanDefaultsBtn, OpenScanConfigBtn })
             {
                 button.IsEnabled = hasProject;
             }
@@ -573,7 +573,7 @@ namespace vs2026_plugin.UI.Control
             label.SetResourceReference(TextBlock.ForegroundProperty, Microsoft.VisualStudio.PlatformUI.EnvironmentColors.ToolWindowTextBrushKey);
 
             var full = new CheckBox { IsChecked = inFullScan, IsEnabled = hasProject, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, ToolTip = scanner.Description, Style = (Style)FindResource("SwitchCheckBox") };
-            full.Click += (s, e) => SaveScanConfig(ScanConfig.Load(_scanConfigRoot).WithScanType(scanner.Key, full.IsChecked ?? false));
+            full.Click += (sender, args) => SaveScanConfig(ScanConfig.Load(_scanConfigRoot).WithScanType(scanner.Key, full.IsChecked ?? false));
 
             UIElement onSaveControl;
             if (scanner.OnSave)
@@ -590,7 +590,7 @@ namespace vs2026_plugin.UI.Control
                 // Dimmed, not disabled, while Auto Scan on Save is off: a click switches it on.
                 bool autoScanOn = _configurationService.GetAutoScan();
                 if (!autoScanOn && inFullScan) { onSave.Opacity = 0.5; onSave.ToolTip = "Auto Scan on Save is off: switching this on turns it on."; }
-                onSave.Click += (s, e) =>
+                onSave.Click += (sender, args) =>
                 {
                     var next = ScanConfig.Load(_scanConfigRoot).WithOnSaveType(scanner.Key, onSave.IsChecked ?? false);
                     SaveScanConfig(next);
@@ -639,12 +639,6 @@ namespace vs2026_plugin.UI.Control
         {
             ThreadHelper.ThrowIfNotOnUIThread();
             SaveScanConfig(ScanConfig.Load(_scanConfigRoot).WithAllScanTypes(true));
-        }
-
-        private void ClearScanTypesBtn_Click(object sender, RoutedEventArgs e)
-        {
-            ThreadHelper.ThrowIfNotOnUIThread();
-            SaveScanConfig(ScanConfig.Load(_scanConfigRoot).WithAllScanTypes(false));
         }
 
         private void RestoreScanDefaultsBtn_Click(object sender, RoutedEventArgs e)
@@ -753,8 +747,10 @@ namespace vs2026_plugin.UI.Control
                     if (!await _installerService.IsValidApiUrlAsync(apiUrl))
                     {
                         await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                        StatusTxt.Text = _installerService.LastConnectionProblem == InsecureUrl.Refused ? InsecureUrl.Refused : "API URL not valid";
+                        StatusTxt.Text = _installerService.LastConnectionProblem ?? "API URL not valid";
                         RunScanBtn.IsEnabled = false;
+                        _mcpChecking = false;
+                        UpdateMcpStatus();
                         return;
                     }
 
@@ -763,6 +759,8 @@ namespace vs2026_plugin.UI.Control
                         await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
                         StatusTxt.Text = _installerService.LastConnectionProblem ?? "API Token not valid";
                         RunScanBtn.IsEnabled = false;
+                        _mcpChecking = false;
+                        UpdateMcpStatus();
                         return;
                     }
 
