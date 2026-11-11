@@ -84,10 +84,18 @@
     <Compile Include="Models\QualityXygeniIssue.cs" />
     <Compile Include="Models\ApisecXygeniIssue.cs" />
     <Compile Include="Models\AiXygeniIssue.cs" />
+    <Compile Include="Models\MalwareXygeniIssue.cs" />
+    <Compile Include="Models\ICodeFlowIssue.cs" />
     <Compile Include="Services\IssueDetailsService.cs" />
     <Compile Include="Services\CodeFlowScripts.cs" />
     <Compile Include="Services\AIExplainService.cs" />
     <Compile Include="Services\LicenseService.cs" />
+    <Compile Include="Services\McpVersion.cs" />
+    <Compile Include="Services\McpUpdateInfoBar.cs" />
+    <Compile Include="Services\ScanConfig.cs" />
+    <Compile Include="Services\ScanOptions.cs" />
+    <Compile Include="Services\InsecureUrl.cs" />
+    <Compile Include="Services\CommandLineArguments.cs" />
     <Compile Include="Editor\XygeniIssueErrorTagger.cs" />
     <Compile Include="Editor\XygeniDocumentSaveListener.cs" />
     <Compile Include="UI\Window\IssueDetailsToolWindow.cs" />
@@ -132,6 +140,7 @@
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="System.Net.Http" />
+    <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xaml" />
     <Reference Include="WindowsBase" />    
     <Reference Include="Markdig, Version=0.38.0, Culture=neutral, PublicKeyToken=null">
@@ -187,6 +196,11 @@
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
     <Content Include="media\icons\ai-security.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <BuildAction>Content</BuildAction>
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
+    <Content Include="media\icons\malware.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <BuildAction>Content</BuildAction>
       <IncludeInVSIX>true</IncludeInVSIX>

@@ -25,6 +25,8 @@ namespace vs2026_plugin.Services
         private bool _pendingReadIssues = false;
         // Scan types of the reads deferred while another read runs; null = one of them was a full read.
         private IReadOnlyList<string> _pendingScanTypes;
+        /// <summary>A full scan that ran while a read was in progress drops the categories it did not run, like a direct one.</summary>
+        private bool _pendingDropAllCategories;
 
         public event EventHandler IssuesChanged;
 
@@ -50,7 +52,9 @@ namespace vs2026_plugin.Services
                 return;
             }
 
-            _ = ReadIssuesAsync(latestScan?.ScanTypes);
+            // A full scan limited to the configured scan types (#415): every category is replaced, the ones it did
+            // not run end up empty instead of lingering from an earlier scan.
+            _ = ReadIssuesAsync(latestScan?.ScanTypes, latestScan?.FullScan ?? false);
         }
 
        
@@ -83,9 +87,12 @@ namespace vs2026_plugin.Services
         // Full read: every report is re-read (startup, or a scan whose types are unknown).
         public Task ReadIssuesAsync() => ReadIssuesAsync(null);
 
+        public Task ReadIssuesAsync(IReadOnlyList<string> scanTypes) => ReadIssuesAsync(scanTypes, false);
+
         // scanTypes = the `--run=` list of the scan that just ended: only those reports were rewritten,
-        // so only their categories are dropped and re-read; the rest keep their current findings.
-        public async Task ReadIssuesAsync(IReadOnlyList<string> scanTypes)
+        // so only their categories are dropped and re-read; the rest keep their current findings, unless
+        // the scan was a full one (dropAllCategories), which replaces everything.
+        public async Task ReadIssuesAsync(IReadOnlyList<string> scanTypes, bool dropAllCategories)
         {
             _logger.Log("");
             _logger.Log("==================================================");
@@ -104,13 +111,14 @@ namespace vs2026_plugin.Services
                 if (_isReadingIssues)
                 {
                     _pendingScanTypes = _pendingReadIssues ? MergeScanTypes(_pendingScanTypes, scanTypes) : scanTypes;
+                    _pendingDropAllCategories = (_pendingReadIssues && _pendingDropAllCategories) || dropAllCategories;
                     _pendingReadIssues = true;
                     _logger.Log("  Issues are already being read, scheduling a refresh...");
                     return;
                 }
                 _logger.Log("  Issues report directory: " + workingDir);
                 _isReadingIssues = true;
-                if (scanTypes == null)
+                if (scanTypes == null || dropAllCategories)
                 {
                     _issues.Clear();
                 }
@@ -139,8 +147,10 @@ namespace vs2026_plugin.Services
                 {
                     _pendingReadIssues = false;
                     var pendingScanTypes = _pendingScanTypes;
+                    bool pendingDropAll = _pendingDropAllCategories;
                     _pendingScanTypes = null;
-                    _ = ReadIssuesAsync(pendingScanTypes);
+                    _pendingDropAllCategories = false;
+                    _ = ReadIssuesAsync(pendingScanTypes, pendingDropAll);
                 }
             }
         }
@@ -164,6 +174,7 @@ namespace vs2026_plugin.Services
                 if (ShouldRead("deps", scanTypes)) await ReadDepsReportAsync(Path.Combine(workingDir, $"deps.{suffix}"));
                 if (ShouldRead("apisec", scanTypes)) await ReadApisecReportAsync(Path.Combine(workingDir, $"apisec.{suffix}"));
                 if (ShouldRead("ai", scanTypes)) await ReadAiReportAsync(Path.Combine(workingDir, $"ai.{suffix}"));
+                if (ShouldRead("malware", scanTypes)) await ReadMalwareReportAsync(Path.Combine(workingDir, $"malware.{suffix}"));
 
                 // Sort issues by severity
                 _issues = _issues.OrderBy(issue => issue.GetSeverityLevel()).ToList();
@@ -296,6 +307,25 @@ namespace vs2026_plugin.Services
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error reading apisec output:");
+                throw;
+            }
+            return Task.CompletedTask;
+        }
+
+        // Synchronous file read wrapped in a Task so the report readers share one signature.
+        public Task ReadMalwareReportAsync(string filename)
+        {
+            if (!File.Exists(filename)) return Task.CompletedTask;
+
+            try
+            {
+                string data = File.ReadAllText(filename);
+                var rawData = JsonConvert.DeserializeObject<JObject>(data);
+                ProcessMalwareReport(rawData);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error reading malware output:");
                 throw;
             }
             return Task.CompletedTask;
@@ -728,6 +758,50 @@ namespace vs2026_plugin.Services
             }
         }
 
+        // The malware report keeps its findings under `evidences`; the kind (execution,
+        // sensitive_data...) is the finding's label, as in the other plugins.
+        private void ProcessMalwareReport(JObject jsonRaw)
+        {
+            var evidences = jsonRaw["evidences"] as JArray ?? new JArray();
+            string tool = jsonRaw["metadata"]?["reportProperties"]?["tool.name"]?.ToString();
+
+            foreach (var evidence in evidences)
+            {
+                if (evidence == null || evidence.Type == JTokenType.Null) continue;
+
+                var location = evidence["location"];
+                var issue = new MalwareXygeniIssue
+                {
+                    Id = evidence["issueId"]?.ToString(),
+                    Type = evidence["kind"]?.ToString() ?? "",
+                    Detector = evidence["detector"]?.ToString() ?? "",
+                    Tool = tool,
+                    Kind = "malware_evidence",
+                    Severity = evidence["severity"]?.ToString() ?? "info",
+                    Confidence = "high",
+                    Category = "malware",
+                    CategoryName = "Malware",
+                    File = location?["filepath"]?.ToString() ?? "",
+                    BeginLine = int.TryParse(location?["beginLine"]?.ToString(), out int beginLine) ? beginLine : 0,
+                    EndLine = int.TryParse(location?["endLine"]?.ToString(), out int endLine) ? endLine : 0,
+                    BeginColumn = int.TryParse(location?["beginColumn"]?.ToString(), out int beginColumn) ? beginColumn : 0,
+                    EndColumn = int.TryParse(location?["endColumn"]?.ToString(), out int endColumn) ? endColumn : 0,
+                    Code = location?["code"]?.ToString() ?? "",
+                    Explanation = evidence["explanation"]?.ToString() ?? "",
+                    Url = "",
+                    Tags = evidence["tags"]?.ToObject<List<string>>() ?? new List<string>(),
+                    Branch = jsonRaw["currentBranch"]?.ToString(),
+                    ScanType = evidence["properties"]?["scanType"]?.ToString(),
+                    ResolvedCode = evidence["properties"]?["resolved.code"]?.ToString(),
+                    CodeFlows = ParseCodeFlows(evidence["codeFlows"] as JArray),
+                    RawJson = evidence.ToString(Formatting.None),
+                    // No `util rectify --malware` (RectifyCommand.java has no malware option).
+                    RemediableLevel = "none"
+                };
+                _issues.Add(issue);
+            }
+        }
+
         private void ProcessAiReport(JObject jsonRaw)
         {
             // The AI report does not reuse the SAST field names: severity is `severityFloor`, the
@@ -818,7 +892,8 @@ namespace vs2026_plugin.Services
                         {
                             Kind = rawFrame["kind"]?.ToString(),
                             Container = rawFrame["container"]?.ToString(),
-                            InjectPoint = rawFrame["injectPoint"]?.ToString(),
+                            // The scanner serializes the frame's injection point as `injectionPoint`.
+                            InjectPoint = (rawFrame["injectionPoint"] ?? rawFrame["injectPoint"])?.ToString(),
                             Category = rawFrame["category"]?.ToString(),
                             FilePath = location?["filepath"]?.ToString() ?? rawFrame["filePath"]?.ToString(),
                             BeginLine = int.TryParse((location?["beginLine"] ?? rawFrame["beginLine"])?.ToString(), out int bl) ? bl : 0,

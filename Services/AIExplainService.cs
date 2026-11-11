@@ -58,10 +58,10 @@ namespace vs2026_plugin.Services
                 return cached;
             }
 
-            string rawJson = (issue as SastXygeniIssue)?.RawJson;
+            string rawJson = (issue as ICodeFlowIssue)?.RawJson;
             if (string.IsNullOrEmpty(rawJson))
             {
-                throw new InvalidOperationException("AI Explain is only available for SAST issues with raw report data.");
+                throw new InvalidOperationException("AI Explain is only available for issues with code flows and raw report data.");
             }
 
             string tempDir = Path.Combine(Path.GetTempPath(), "xygeni-explain");

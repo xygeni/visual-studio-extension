@@ -57,3 +57,4 @@ nunit-*.xml
 .idea/modules.xml
 .idea/vcs.xml
 .idea
+.DS_Store
