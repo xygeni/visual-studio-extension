@@ -108,8 +108,9 @@ namespace vs2026_plugin.Services
             var onSaveTypes = new HashSet<string>(OnSaveScanners.Select(scanner => scanner.Key));
             var effectiveOnSave = AllScanTypes.Where(type => requestedOnSave.Contains(type) && onSaveTypes.Contains(type) && effectiveScans.Contains(type)).ToList();
 
+            // A quote or control character could end the --exclude-add argument and pass the rest as options: dropped.
             var effectiveExcludes = (excludes ?? new string[0]).Where(value => value != null).Select(value => value.Trim())
-                .Where(value => value.Length > 0).Distinct().ToList();
+                .Where(value => value.Length > 0 && !ScanOptions.HasUnsafeChars(value)).Distinct().ToList();
             return new ScanConfig(effectiveScans, effectiveOnSave, effectiveExcludes, ScanOptions.Normalize(options));
         }
 
@@ -139,7 +140,14 @@ namespace vs2026_plugin.Services
             return array.Where(item => item.Type == JTokenType.String).Select(item => item.Value<string>()).ToList();
         }
 
-        public string ToJson()
+        /// <summary>The keys this version reads and writes; any other key in the file is kept as it is.</summary>
+        public static readonly string[] KnownKeys = { "scans", "onSave", "excludes", "options" };
+
+        /// <summary>
+        /// The file content. The file is shared by the four plugins and committed: the keys of <paramref name="existing"/>
+        /// this version does not know (added by another plugin or a later version) are kept, only the four known ones are replaced.
+        /// </summary>
+        public string ToJson(string existing = null)
         {
             var root = new JObject
             {
@@ -148,7 +156,39 @@ namespace vs2026_plugin.Services
                 ["excludes"] = new JArray(Excludes),
                 ["options"] = new JArray(Options)
             };
+            JObject previous = null;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(existing)) previous = JsonConvert.DeserializeObject<JToken>(existing) as JObject;
+            }
+            catch (JsonException)
+            {
+                // Not JSON: rewritten with the known keys only, as before.
+            }
+            if (previous != null)
+            {
+                foreach (var property in previous.Properties().Where(property => !KnownKeys.Contains(property.Name)))
+                {
+                    root[property.Name] = property.Value;
+                }
+            }
             return root.ToString(Formatting.Indented) + "\n";
+        }
+
+        /// <summary>
+        /// Refuses to write through a link: a repository can commit <c>.xygeni</c> or <c>ide.json</c> as a symbolic link
+        /// (or junction), and a switch in the IDE would then overwrite the file it points to, outside the project.
+        /// </summary>
+        public static void CheckNotLinked(string path)
+        {
+            foreach (string candidate in new[] { Path.GetDirectoryName(path), path })
+            {
+                if ((File.Exists(candidate) || Directory.Exists(candidate))
+                    && (File.GetAttributes(candidate) & FileAttributes.ReparsePoint) != 0)
+                {
+                    throw new IOException($"{candidate} is a symbolic link: not written, so a change cannot land outside the project");
+                }
+            }
         }
 
         public static string PathFor(string projectRoot) => Path.Combine(projectRoot, ConfigDir, ConfigFile);
@@ -166,18 +206,21 @@ namespace vs2026_plugin.Services
             catch (UnauthorizedAccessException) { return Defaults(); }
         }
 
-        /// <summary>Writes the configuration; the defaults remove the file instead, so an untouched project leaves nothing behind.</summary>
+        /// <summary>
+        /// Writes the configuration, keeping the keys of the file this version does not know. The defaults do not create
+        /// the file (an untouched project leaves nothing behind), but an existing one is rewritten, never deleted: it is
+        /// usually committed, and "Restore defaults" must not show up as a deleted file.
+        /// </summary>
         public static void Save(string projectRoot, ScanConfig config)
         {
             string path = PathFor(projectRoot);
+            CheckNotLinked(path);
             var normalized = Normalize(config.Scans, config.OnSave, config.Excludes, config.Options);
-            if (normalized.IsDefault)
-            {
-                if (File.Exists(path)) File.Delete(path);
-                return;
-            }
+            bool exists = File.Exists(path);
+            if (normalized.IsDefault && !exists) return;
+            string existing = exists ? File.ReadAllText(path) : null;
             Directory.CreateDirectory(Path.GetDirectoryName(path));
-            File.WriteAllText(path, normalized.ToJson());
+            File.WriteAllText(path, normalized.ToJson(existing));
         }
 
         /// <summary>A copy with <paramref name="type"/> switched in or out of the full scan; on-save follows (it can never exceed the full scan).</summary>

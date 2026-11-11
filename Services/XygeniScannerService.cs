@@ -415,10 +415,11 @@ namespace vs2026_plugin.Services
 
                 // Add arguments carefully
                 // TS: ["-NoProfile","-ExecutionPolicy", "Bypass", "-File", scannerScriptPath, ...args]
-                string psPrefix = $"-NoProfile -ExecutionPolicy Bypass -File \"{scannerScriptPath}\"";
+                string psPrefix = "-NoProfile -ExecutionPolicy Bypass -File " + CommandLineArguments.Quote(scannerScriptPath);
 
-                // Append other args wrapping in quotes if needed
-                startInfo.Arguments = psPrefix + string.Concat(commandArgs.Select(arg => $" \"{arg}\""));
+                // Each argument quoted with the CommandLineToArgvW rules: a quote or a trailing backslash inside a value
+                // (e.g. an exclude "build\") must not end the argument and merge or inject the following ones.
+                startInfo.Arguments = psPrefix + string.Concat(commandArgs.Select(arg => " " + CommandLineArguments.Quote(arg)));
 
                 // Add Env Vars
                 foreach (var kvp in env)
@@ -510,6 +511,13 @@ namespace vs2026_plugin.Services
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
             string apiUrl = _configurationService.GetUrl();
+            // The scanner sends XYGENI_TOKEN to XYGENI_URL: every scan, incremental scan, rectify and AI explain starts here,
+            // so an http URL the settings refuse never gets the token, whatever the connection status says (#1438).
+            string insecureProblem = InsecureUrl.Problem(apiUrl, _configurationService.GetAllowInsecureHttp());
+            if (insecureProblem != null)
+            {
+                throw new InvalidOperationException(insecureProblem);
+            }
             env["XYGENI_URL"] = apiUrl;
 
             string token = _configurationService.GetToken();

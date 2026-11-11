@@ -136,6 +136,13 @@ namespace vs2026_plugin.Services
                 return parsed.Value == null ? Validation.Accepted(spec.Name, spec) : Validation.Refused($"{spec.Name} takes no value");
             }
             string value = (parsed.Value ?? string.Empty).Trim();
+            // .xygeni\ide.json is committed by whoever authored the repository: a quote would close the argument and let
+            // the rest reach the scanner as options of its own, past this closed list.
+            if (HasUnsafeChars(value)) return Validation.Refused($"{spec.Name}: no quotes or control characters in the value");
+            if (spec.Kind == Kind.Path && !(spec.Name == "--mute" && value.StartsWith("#")) && !IsPathInsideProject(value))
+            {
+                return Validation.Refused($"{spec.Name}: a path inside the project (relative, without ..)");
+            }
             if (value.Length == 0)
             {
                 return Validation.Incomplete($"{spec.Name} needs a value" + (spec.Placeholder != null ? $", like {spec.Placeholder}" : ""), spec);
@@ -157,6 +164,25 @@ namespace vs2026_plugin.Services
             }
             if (spec.Kind != Kind.Path && value.Any(char.IsWhiteSpace)) return Validation.Refused($"{spec.Name}: no spaces in the value");
             return Validation.Accepted($"{spec.Name}={value}", spec);
+        }
+
+        /// <summary>
+        /// A double quote or a control character, which the command line could read as the end of the argument. Values
+        /// from <c>.xygeni\ide.json</c> (options and excludes) are refused with one.
+        /// </summary>
+        public static bool HasUnsafeChars(string value) => value != null && value.Any(c => c == '"' || char.IsControl(c));
+
+        /// <summary>
+        /// A path the scanner reads (<c>--conf</c>, <c>--custom-detectors-dir</c>, <c>--mute</c>) must stay inside the
+        /// project: relative and without <c>..</c>. The file is committed, so an absolute path or <c>..</c> would let a
+        /// repository load detectors or mute rules from anywhere on the developer's machine. <c>--mute=#name</c> names a
+        /// profile, not a file.
+        /// </summary>
+        public static bool IsPathInsideProject(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return false;
+            if (value.StartsWith("/") || value.StartsWith("\\") || value.StartsWith("~") || Regex.IsMatch(value, "^[A-Za-z]:")) return false;
+            return !value.Split('/', '\\').Any(segment => segment == "..");
         }
 
         /// <summary>The option name of a canonical entry (<c>--ai-review=all</c> → <c>--ai-review</c>).</summary>

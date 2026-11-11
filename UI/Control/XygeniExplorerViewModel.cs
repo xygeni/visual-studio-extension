@@ -6,6 +6,7 @@ using System.Linq;
 using System;
 using System.Reflection;
 using vs2026_plugin.Services;
+using vs2026_plugin.Commands;
 using vs2026_plugin.Models;
 using vs2026_plugin.UI.Control;
 using Microsoft.VisualStudio.Shell;
@@ -54,10 +55,21 @@ namespace vs2026_plugin.UI.Control
             {
                 // The scan types of .xygeni\ide.json, read off the UI thread; null when there is no solution root.
                 List<string> configuredScans = null;
+                // The scan types with a report on disk: without one, "0" would claim a clean scan that never ran
+                // (never scanned, or skipped as not licensed: the scanner writes no report for those).
+                HashSet<string> reportedScans = null;
                 try
                 {
                     string root = await XygeniConfigurationService.GetInstance().GetRootDirectoryAsync();
                     if (!string.IsNullOrEmpty(root)) configuredScans = ScanConfig.Load(root).Scans.ToList();
+                    string reportDir = await XygeniConfigurationService.GetInstance().GetMetadataFolderAsyncForProject();
+                    if (!string.IsNullOrEmpty(reportDir) && Directory.Exists(reportDir))
+                    {
+                        string suffix = "." + XygeniCommands.ReportSuffix;
+                        reportedScans = new HashSet<string>(Directory.EnumerateFiles(reportDir, "*" + suffix)
+                            .Select(report => Path.GetFileName(report))
+                            .Select(name => name.Substring(0, name.Length - suffix.Length)), StringComparer.OrdinalIgnoreCase);
+                    }
                 }
                 catch (Exception) { }
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
@@ -97,7 +109,11 @@ namespace vs2026_plugin.UI.Control
                     var categoryIssues = issuesByCategory.TryGetValue(categoryName, out var found) ? found : new List<IXygeniIssue>();
                     string scanType = GetCategoryScanType(categoryName);
                     bool inScanConfig = scanType == null || configuredScans == null || configuredScans.Contains(scanType);
-                    string count = categoryIssues.Count == 0 && !inScanConfig ? "Not in the scan configuration" : categoryIssues.Count.ToString();
+                    bool hasReport = scanType == null || reportedScans == null || reportedScans.Contains(scanType);
+                    string count = categoryIssues.Count > 0 ? categoryIssues.Count.ToString()
+                        : !inScanConfig ? "Not in the scan configuration"
+                        : !hasReport ? "not scanned or not licensed"
+                        : "0";
                     var catNode = new TreeNodeData(
                         $"{categoryName} ({count})",
                         GetCategoryIcon(categoryName),

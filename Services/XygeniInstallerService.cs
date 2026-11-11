@@ -381,16 +381,27 @@ namespace vs2026_plugin.Services
             _logger.Log($"  MCP server published version: {remoteVersion ?? "unknown"}");
             _logger.Log($"  Downloading MCP library from: {XygeniMCPLibraryUrl} to: {installMcpPath}");
 
+            // Checksum first: without one an update is not even downloaded (see McpVersion.GetChecksumAction).
+            var checksum = await FetchTextWithStatusAsync(XygeniMCPChecksumUrl).ConfigureAwait(false);
+            string expectedChecksum = checksum.Status == 200 ? McpVersion.FromChecksumFile(checksum.Body) : null;
+            bool jarInstalled = File.Exists(mcpLibraryPath);
+            var checksumAction = McpVersion.GetChecksumAction(checksum.Status, expectedChecksum, jarInstalled);
+            if (checksumAction == McpVersion.ChecksumAction.Skip)
+            {
+                throw new Exception($"the MCP server checksum is not available at {XygeniMCPChecksumUrl} ({checksum.Status?.ToString() ?? "no answer"}); "
+                    + (jarInstalled ? "the installed copy is kept and the update is retried at the next check" : "nothing installed, retried at the next start"));
+            }
+
             // Download next to the JAR and move it into place, so an MCP client never runs a half-written JAR.
             string temporaryPath = mcpLibraryPath + ".tmp";
             try
             {
                 await DownloadFileAsync(XygeniMCPLibraryUrl, temporaryPath).ConfigureAwait(false);
 
-                string expectedChecksum = McpVersion.FromChecksumFile(await FetchTextAsync(XygeniMCPChecksumUrl).ConfigureAwait(false));
-                if (expectedChecksum == null)
+                if (checksumAction == McpVersion.ChecksumAction.InstallUnverified)
                 {
-                    _logger.Log($"  MCP server checksum is not available at {XygeniMCPChecksumUrl}; the download is not verified");
+                    _logger.Log($"  MCP server checksum is not published yet at {XygeniMCPChecksumUrl} ({checksum.Status}); first install not verified");
+                    ShowUnverifiedMcpInstallWarning();
                 }
                 else
                 {
@@ -530,6 +541,13 @@ namespace vs2026_plugin.Services
         // GET a small text resource (version, checksum); null on any failure, which is logged and never thrown.
         private async Task<string> FetchTextAsync(string url)
         {
+            var result = await FetchTextWithStatusAsync(url).ConfigureAwait(false);
+            return result.Status == 200 ? result.Body : null;
+        }
+
+        /// <summary>The HTTP status (null when there was no answer) and the body of a 200; failures are logged, never thrown.</summary>
+        private async Task<(int? Status, string Body)> FetchTextWithStatusAsync(string url)
+        {
             try
             {
                 using (var httpClient = CreateHttpClient())
@@ -538,20 +556,32 @@ namespace vs2026_plugin.Services
                     httpClient.Timeout = TimeSpan.FromSeconds(10);
                     using (var response = await httpClient.GetAsync(url).ConfigureAwait(false))
                     {
-                        if (!response.IsSuccessStatusCode)
+                        int status = (int)response.StatusCode;
+                        if (status != 200)
                         {
-                            _logger.Log($"  GET {url}: HTTP {(int)response.StatusCode}");
-                            return null;
+                            _logger.Log($"  GET {url}: HTTP {status}");
+                            return (status, null);
                         }
-                        return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        return (status, await response.Content.ReadAsStringAsync().ConfigureAwait(false));
                     }
                 }
             }
             catch (Exception ex)
             {
                 _logger.Log($"  GET {url} failed: {ex.Message}");
-                return null;
+                return (null, null);
             }
+        }
+
+        /// <summary>A first install without a published checksum is allowed during the rollout of #2381, but never silently.</summary>
+        private static void ShowUnverifiedMcpInstallWarning()
+        {
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                McpUpdateInfoBar.Show("The Xygeni MCP server was installed without checksum verification: the checksum is not published yet. "
+                    + "Updates are only installed once it is.", new (string text, string id)[0], _ => { }, warning: true);
+            });
         }
 
         private static string ReadTextOrNull(string path)

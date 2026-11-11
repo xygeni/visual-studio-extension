@@ -69,5 +69,23 @@ namespace vs2026_plugin.Services
             string token = content.Trim().Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
             return token != null && Sha256Pattern.IsMatch(token) ? token.ToLowerInvariant() : null;
         }
+
+        /// <summary>What to do with the MCP download given the published .sha256 (#2382).</summary>
+        public enum ChecksumAction { Verify, InstallUnverified, Skip }
+
+        /// <summary>
+        /// Never replaces an installed JAR with an unverified one: an update without a valid checksum keeps the installed
+        /// copy and is retried at the next check. A first install goes ahead unverified only when the server answers that
+        /// the .sha256 is not published (403/404, the state until #2381 is promoted to get.xygeni.io); a timeout, 5xx or
+        /// an unreadable checksum installs nothing.
+        /// </summary>
+        /// <param name="status">HTTP status of the .sha256 GET, null when there was no answer.</param>
+        /// <param name="expected">The hash read from a 200 body, null when it is not one.</param>
+        public static ChecksumAction GetChecksumAction(int? status, string expected, bool jarInstalled)
+        {
+            if (status == 200 && expected != null) return ChecksumAction.Verify;
+            if (!jarInstalled && (status == 403 || status == 404)) return ChecksumAction.InstallUnverified;
+            return ChecksumAction.Skip;
+        }
     }
 }

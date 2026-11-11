@@ -200,7 +200,7 @@ namespace vs2026_plugin.UI.Control
             {
                 Clipboard.SetText(config.ToString(Newtonsoft.Json.Formatting.Indented));
                 MessageBox.Show("MCP server configuration copied to the clipboard. Paste it into your AI assistant's MCP configuration (mcp.json)."
-                    + (string.IsNullOrEmpty(token) ? " Replace $XYGENI_TOKEN with your token." : " It contains your Xygeni token: keep that file private."),
+                    + (string.IsNullOrEmpty(token) ? " Replace $XYGENI_TOKEN with your token." : " It contains your Xygeni token: paste it into your user configuration, not a file of the project (project files are usually committed)."),
                     "Xygeni MCP server", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -223,7 +223,14 @@ namespace vs2026_plugin.UI.Control
         private void AllowInsecureHttpChk_Click(object sender, RoutedEventArgs e)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
-            _configurationService.SaveAllowInsecureHttp(AllowInsecureHttpChk.IsChecked ?? false);
+            bool allow = AllowInsecureHttpChk.IsChecked ?? false;
+            _configurationService.SaveAllowInsecureHttp(allow);
+            // Unticked with an http URL already connected: scans must stop now, not at the next validation (#1438).
+            if (!allow && InsecureUrl.IsInsecureRemote(_configurationService.GetUrl()))
+            {
+                _licenseService.Invalidate();
+                UpdateStatusText();
+            }
         }
 
         private void SkipSslVerifyChk_Click(object sender, RoutedEventArgs e)
@@ -263,6 +270,16 @@ namespace vs2026_plugin.UI.Control
             // Free plan: Auto Scan on Save relies on --incremental, which the CLI Free edition
             // rejects. Disable the toggle and offer an upgrade link, but keep manual scans usable.
             UpgradeMsg.Visibility = (licensed && isFree) ? Visibility.Visible : Visibility.Collapsed;
+
+            string insecureProblem = InsecureUrl.Problem(_configurationService.GetUrl(), _configurationService.GetAllowInsecureHttp());
+            if (insecureProblem != null)
+            {
+                StatusTxt.Text = insecureProblem;
+                StatusTxt.Foreground = new SolidColorBrush(Colors.Red);
+                RunScanBtn.IsEnabled = false;
+                AutoScanChk.IsEnabled = false;
+                return;
+            }
 
             if (!licensed && _licenseService.LicenseChecked)
             {
@@ -507,6 +524,11 @@ namespace vs2026_plugin.UI.Control
                 MessageBox.Show("One pattern at a time (no commas).", "Xygeni Configuration", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
+            if (ScanOptions.HasUnsafeChars(pattern))
+            {
+                MessageBox.Show("No quotes or control characters in a pattern.", "Xygeni Configuration", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
             ExcludePatternTxt.Text = string.Empty;
             SaveScanConfig(ScanConfig.Load(_scanConfigRoot).WithExclude(pattern));
         }
@@ -657,6 +679,7 @@ namespace vs2026_plugin.UI.Control
                 string path = ScanConfig.PathFor(_scanConfigRoot);
                 if (!File.Exists(path))
                 {
+                    ScanConfig.CheckNotLinked(path);
                     Directory.CreateDirectory(Path.GetDirectoryName(path));
                     File.WriteAllText(path, ScanConfig.Load(_scanConfigRoot).ToJson());
                 }
@@ -723,6 +746,8 @@ namespace vs2026_plugin.UI.Control
             };
 
             _configurationService.SaveProxySettings(proxySettings);
+            // The licence granted for the previous URL no longer counts: re-validated below, refused for an insecure URL.
+            _licenseService.Invalidate();
             _configurationService.SaveUrl(ApiUrlTxt.Text);
             _configurationService.SaveToken(ApiTokenTxt.Password);
 

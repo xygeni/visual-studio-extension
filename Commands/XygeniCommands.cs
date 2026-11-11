@@ -215,6 +215,18 @@ namespace vs2026_plugin.Commands
         /// <param name="silent">When true, suppress the MessageBox (use for auto-scan).</param>
         public static async Task<bool> EnsureLicenseAsync(bool silent = false)
         {
+            // A refused http URL is not a licence problem: say why, instead of sending the user to their administrator (#1438).
+            var settings = XygeniConfigurationService.GetInstance();
+            string insecureProblem = InsecureUrl.Problem(settings.GetUrl(), settings.GetAllowInsecureHttp());
+            if (insecureProblem != null)
+            {
+                if (!silent)
+                {
+                    MessageBox.Show(insecureProblem, "Xygeni", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                return false;
+            }
+
             LicenseService license;
             try
             {

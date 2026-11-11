@@ -212,6 +212,18 @@ namespace vs2026_plugin.Services
             }
         }
 
+        /// <summary>
+        /// Forgets the last check: the URL changed, or "Allow insecure HTTP" was unticked for an http URL. The next scan
+        /// re-validates (and an insecure URL is refused there), instead of reusing a seat granted for another URL (#1438).
+        /// </summary>
+        public void Invalidate()
+        {
+            LicenseChecked = false;
+            if (!_isLicenseAvailable) return;
+            _isLicenseAvailable = false;
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
         private void SetLicenseAvailable(bool value)
         {
             LicenseChecked = true;

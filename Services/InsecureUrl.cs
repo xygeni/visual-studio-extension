@@ -27,7 +27,8 @@ namespace vs2026_plugin.Services
         public static bool IsInsecureRemote(string url)
         {
             if (string.IsNullOrWhiteSpace(url)) return false;
-            if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out Uri parsed)) return false;
+            // An http string Uri cannot parse is still sent by some clients: the check must not fail open.
+            if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out Uri parsed)) return url.TrimStart().StartsWith("http:", StringComparison.OrdinalIgnoreCase);
             return parsed.Scheme == Uri.UriSchemeHttp && !IsLoopbackHost(parsed.Host);
         }
 
