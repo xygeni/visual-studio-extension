@@ -8,10 +8,14 @@ on:
 env:
   RUNNING_GITHUB: true
 
+permissions:
+  contents: read
+
 jobs:
+  # MSBuild and the VS SDK only exist on Windows runners
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
     # https://github.com/marketplace/actions/checkout
@@ -26,14 +30,24 @@ jobs:
       with:
         vs-version: '[17.0, )'
 
-    - name: Restore NuGet packages
-      run: nuget restore ${{ inputs.solution-file-path }}
-
+    # The project uses PackageReference, so MSBuild restores the packages itself
     - name: Build
       shell: powershell
       run: |
-        msbuild ${{ inputs.solution-file-path }} /p:configuration=Release /p:DeployExtension=false /p:ZipPackageCompressionLevel=normal /v:m
-  
+        msbuild vs2026-plugin.slnx -restore /p:configuration=Release /p:DeployExtension=false /p:ZipPackageCompressionLevel=normal /v:m
+
+  # The Xygeni action runs on Linux; the scan does not need the build output
+  scan:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    # https://github.com/marketplace/actions/checkout
+    - name: Checkout the repo
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        ref: main
+        fetch-depth: 0
 
       # https://github.com/marketplace/actions/xygeni-scanner
     - name: Xygeni Scanner
