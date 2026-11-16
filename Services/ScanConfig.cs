@@ -108,7 +108,8 @@ namespace vs2026_plugin.Services
             var onSaveTypes = new HashSet<string>(OnSaveScanners.Select(scanner => scanner.Key));
             var effectiveOnSave = AllScanTypes.Where(type => requestedOnSave.Contains(type) && onSaveTypes.Contains(type) && effectiveScans.Contains(type)).ToList();
 
-            // A quote or control character could end the --exclude-add argument and pass the rest as options: dropped.
+            // A quote, a control character or a trailing backslash could end the --exclude-add argument and pass the rest
+            // as options (ScanOptions.HasUnsafeChars): dropped.
             var effectiveExcludes = (excludes ?? new string[0]).Where(value => value != null).Select(value => value.Trim())
                 .Where(value => value.Length > 0 && !ScanOptions.HasUnsafeChars(value)).Distinct().ToList();
             return new ScanConfig(effectiveScans, effectiveOnSave, effectiveExcludes, ScanOptions.Normalize(options));

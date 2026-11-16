@@ -138,7 +138,7 @@ namespace vs2026_plugin.Services
             string value = (parsed.Value ?? string.Empty).Trim();
             // .xygeni\ide.json is committed by whoever authored the repository: a quote would close the argument and let
             // the rest reach the scanner as options of its own, past this closed list.
-            if (HasUnsafeChars(value)) return Validation.Refused($"{spec.Name}: no quotes or control characters in the value");
+            if (HasUnsafeChars(value)) return Validation.Refused($"{spec.Name}: no quotes, control characters or a trailing backslash in the value");
             if (spec.Kind == Kind.Path && !(spec.Name == "--mute" && value.StartsWith("#")) && !IsPathInsideProject(value))
             {
                 return Validation.Refused($"{spec.Name}: a path inside the project (relative, without ..)");
@@ -167,10 +167,14 @@ namespace vs2026_plugin.Services
         }
 
         /// <summary>
-        /// A double quote or a control character, which the command line could read as the end of the argument. Values
-        /// from <c>.xygeni\ide.json</c> (options and excludes) are refused with one.
+        /// A double quote or a control character, which the command line could read as the end of the argument, or a
+        /// trailing backslash: <c>xygeni.ps1</c> forwards the arguments to java with Windows PowerShell 5.1's native
+        /// argument passing, which quotes an argument with spaces without escaping a backslash before the closing quote,
+        /// so <c>a b\</c> would swallow the quote and merge the next arguments into this one. Values from
+        /// <c>.xygeni\ide.json</c> (options and excludes) are refused with one.
         /// </summary>
-        public static bool HasUnsafeChars(string value) => value != null && value.Any(c => c == '"' || char.IsControl(c));
+        public static bool HasUnsafeChars(string value) =>
+            value != null && (value.Any(c => c == '"' || char.IsControl(c)) || value.TrimEnd().EndsWith("\\"));
 
         /// <summary>
         /// A path the scanner reads (<c>--conf</c>, <c>--custom-detectors-dir</c>, <c>--mute</c>) must stay inside the

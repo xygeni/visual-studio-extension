@@ -86,7 +86,12 @@ namespace vs2026_plugin.Tests
         [InlineData("--mute=x\" \"--set-baseline")]
         [InlineData("--custom-detectors-dir=x\" --upload -o C:\\p \"y")]
         [InlineData("--standard=a\u0001b")]
-        public void AQuoteOrControlCharacterIsRefused(string option) => Assert.False(ScanOptions.Validate(option).Ok);
+        [InlineData("--conf=conf x\\")]
+        [InlineData("--mute=mutes\\ ")]
+        public void AQuoteOrControlCharacterOrTrailingBackslashIsRefused(string option) => Assert.False(ScanOptions.Validate(option).Ok);
+
+        [Fact]
+        public void ABackslashInsideThePathIsAccepted() => Assert.True(ScanOptions.Validate("--mute=my mutes\\.xygeni.mute.yml").Ok);
 
         [Fact]
         public void APathMayHaveSpaces() => Assert.True(ScanOptions.Validate("--mute=my mutes/.xygeni.mute.yml").Ok);
@@ -125,8 +130,8 @@ namespace vs2026_plugin.Tests
         [Fact]
         public void AnExcludeThatCouldBreakTheArgumentIsDropped()
         {
-            var config = ScanConfig.Parse("{\"excludes\":[\"vendor/**\",\"x\\\" --upload \\\"y\"]}");
-            Assert.Equal(new[] { "vendor/**" }, config.Excludes.ToArray());
+            var config = ScanConfig.Parse("{\"excludes\":[\"vendor/**\",\"x\\\" --upload \\\"y\",\"a b\\\\\",\"build\\\\ \",\"my build\\\\out\"]}");
+            Assert.Equal(new[] { "vendor/**", "my build\\out" }, config.Excludes.ToArray());
         }
     }
 

@@ -526,7 +526,7 @@ namespace vs2026_plugin.UI.Control
             }
             if (ScanOptions.HasUnsafeChars(pattern))
             {
-                MessageBox.Show("No quotes or control characters in a pattern.", "Xygeni Configuration", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("No quotes, control characters or a trailing backslash in a pattern.", "Xygeni Configuration", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             ExcludePatternTxt.Text = string.Empty;
