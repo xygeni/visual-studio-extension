@@ -168,6 +168,12 @@ namespace vs2026_plugin.Editor
                         return;
                     }
 
+                    if (!XygeniScannerService.HasOnSaveScanTypes(rootDir))
+                    {
+                        _logger.Log("Auto-scan skipped: no scan type is configured to run on save (.xygeni/ide.json).");
+                        return;
+                    }
+
                     _logger.Log("Auto-scan: triggering incremental scan after file save");
 
                     try

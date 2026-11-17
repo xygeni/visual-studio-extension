@@ -29,9 +29,17 @@ namespace vs2026_plugin.Services
         private const string AutoScanKey = "AutoScan";
         // Scanner global options, placed before the command: xygeni <options> scan ... (xygeni/tech-support#378)
         private const string SkipSslVerifyKey = "ScannerSkipSslVerify";
+        private const string AllowInsecureHttpKey = "AllowInsecureHttp";
         private const string SkipUpdateKey = "ScannerSkipUpdate";
         private const string VerboseKey = "ScannerVerbose";
         private const string AdditionalGlobalOptionsKey = "ScannerAdditionalGlobalOptions";
+        // MCP server updates (xygeni/xygeni-product-backlog#2382): notify (default), auto or off, and an ignored version
+        private const string McpUpdateModeKey = "McpUpdateMode";
+        private const string McpIgnoredVersionKey = "McpIgnoredVersion";
+        private const string McpRestartPendingKey = "McpRestartPending";
+        public const string McpUpdateNotify = "notify";
+        public const string McpUpdateAuto = "auto";
+        public const string McpUpdateOff = "off";
         private const string MetadataFolderKey = ".xygenidata";
 
         private readonly SettingsManager _settingsManager;
@@ -153,6 +161,9 @@ namespace vs2026_plugin.Services
         }
 
         public bool GetSkipSslVerify() { return GetBoolean(SkipSslVerifyKey); }
+        /// <summary>"Allow insecure HTTP": an http server URL to a non-loopback host is refused unless this is on (#1438).</summary>
+        public bool GetAllowInsecureHttp() { return GetBoolean(AllowInsecureHttpKey); }
+        public void SaveAllowInsecureHttp(bool value) { GetWritableStore().SetBoolean(CollectionPath, AllowInsecureHttpKey, value); }
         public void SaveSkipSslVerify(bool value) { GetWritableStore().SetBoolean(CollectionPath, SkipSslVerifyKey, value); }
 
         public bool GetSkipUpdate() { return GetBoolean(SkipUpdateKey); }
@@ -172,6 +183,44 @@ namespace vs2026_plugin.Services
         public void SaveAdditionalGlobalOptions(string value)
         {
             GetWritableStore().SetString(CollectionPath, AdditionalGlobalOptionsKey, (value ?? string.Empty).Trim());
+        }
+
+        /// <summary>How a newer published MCP server is handled: notify (default), auto or off.</summary>
+        public string GetMcpUpdateMode()
+        {
+            var store = _settingsManager.GetReadOnlySettingsStore(SettingsScope.UserSettings);
+            string mode = store.CollectionExists(CollectionPath) ? store.GetString(CollectionPath, McpUpdateModeKey, McpUpdateNotify) : McpUpdateNotify;
+            return mode == McpUpdateAuto || mode == McpUpdateOff ? mode : McpUpdateNotify;
+        }
+
+        public void SaveMcpUpdateMode(string mode)
+        {
+            GetWritableStore().SetString(CollectionPath, McpUpdateModeKey, mode == McpUpdateAuto || mode == McpUpdateOff ? mode : McpUpdateNotify);
+        }
+
+        /// <summary>A published version the user chose not to be told about again; empty when none.</summary>
+        public string GetMcpIgnoredVersion()
+        {
+            var store = _settingsManager.GetReadOnlySettingsStore(SettingsScope.UserSettings);
+            return store.CollectionExists(CollectionPath) ? store.GetString(CollectionPath, McpIgnoredVersionKey, string.Empty) : string.Empty;
+        }
+
+        public void SaveMcpIgnoredVersion(string version)
+        {
+            GetWritableStore().SetString(CollectionPath, McpIgnoredVersionKey, (version ?? string.Empty).Trim());
+        }
+
+        /// <summary>Version installed by an update that the AI assistant has not loaded yet; null once the user said OK (#2382).</summary>
+        public string GetMcpRestartPending()
+        {
+            var store = _settingsManager.GetReadOnlySettingsStore(SettingsScope.UserSettings);
+            string version = store.CollectionExists(CollectionPath) ? store.GetString(CollectionPath, McpRestartPendingKey, string.Empty) : string.Empty;
+            return string.IsNullOrWhiteSpace(version) ? null : version;
+        }
+
+        public void SaveMcpRestartPending(string version)
+        {
+            GetWritableStore().SetString(CollectionPath, McpRestartPendingKey, (version ?? string.Empty).Trim());
         }
 
         /// <summary>The options placed before the scanner command (`xygeni &lt;options&gt; scan ...`).</summary>

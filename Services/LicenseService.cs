@@ -93,6 +93,15 @@ namespace vs2026_plugin.Services
                 SetLicenseAvailable(false);
                 return false;
             }
+            // The seat registration is the first request with the token at startup: an http URL to a non-loopback
+            // host saved earlier would send it in clear before the URL check in Xygeni Settings runs (#1438).
+            string insecureProblem = InsecureUrl.Problem(apiUrl, XygeniConfigurationService.GetInstance().GetAllowInsecureHttp());
+            if (insecureProblem != null)
+            {
+                _logger.Log(insecureProblem);
+                SetLicenseAvailable(false);
+                return false;
+            }
 
             try
             {
@@ -201,6 +210,18 @@ namespace vs2026_plugin.Services
             {
                 _logger?.Error(ex, "Error releasing Xygeni IDE License seat");
             }
+        }
+
+        /// <summary>
+        /// Forgets the last check: the URL changed, or "Allow insecure HTTP" was unticked for an http URL. The next scan
+        /// re-validates (and an insecure URL is refused there), instead of reusing a seat granted for another URL (#1438).
+        /// </summary>
+        public void Invalidate()
+        {
+            LicenseChecked = false;
+            if (!_isLicenseAvailable) return;
+            _isLicenseAvailable = false;
+            Changed?.Invoke(this, EventArgs.Empty);
         }
 
         private void SetLicenseAvailable(bool value)

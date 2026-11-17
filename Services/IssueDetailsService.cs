@@ -572,12 +572,12 @@ namespace vs2026_plugin.Services
 
         private string GetCodeFlowTabContent(IXygeniIssue issue)
         {
-            if (!(issue is SastXygeniIssue sastIssue) || !sastIssue.HasCodeFlow)
+            if (!(issue is ICodeFlowIssue codeFlowIssue) || !codeFlowIssue.HasCodeFlow)
             {
                 return string.Empty;
             }
 
-            var (nodesJson, linksJson, pathsJson) = BuildCodeFlowDataModel(sastIssue.CodeFlows);
+            var (nodesJson, linksJson, pathsJson) = BuildCodeFlowDataModel(codeFlowIssue.CodeFlows);
 
             string script = CodeFlowScripts.MainScript
                 .Replace("__NODES_PLACEHOLDER__", nodesJson)
@@ -661,10 +661,13 @@ namespace vs2026_plugin.Services
                 paths.Add(currentPath);
             }
 
+            // Written inside a <script> element: scanned code may contain "</script>", so HTML-significant
+            // characters go out as JSON unicode escapes, which read back as the same text.
+            var scriptSafe = new JsonSerializerSettings { StringEscapeHandling = StringEscapeHandling.EscapeHtml };
             return (
-                JsonConvert.SerializeObject(nodes),
-                JsonConvert.SerializeObject(links),
-                JsonConvert.SerializeObject(paths)
+                JsonConvert.SerializeObject(nodes, scriptSafe),
+                JsonConvert.SerializeObject(links, scriptSafe),
+                JsonConvert.SerializeObject(paths, scriptSafe)
             );
         }
 

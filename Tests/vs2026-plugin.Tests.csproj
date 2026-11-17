@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Unit tests for the extension logic that needs no Visual Studio: the http guard, MCP versions and checksums, the
+    scanner options, .xygeni\ide.json and the command line quoting. The files are linked from ../Services, so the tests
+    run on the extension code itself. Run with: dotnet test Tests
+    A file linked here must not use the VS SDK (there is none on this classpath).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>vs2026_plugin.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Services\InsecureUrl.cs" Link="Linked\InsecureUrl.cs" />
+    <Compile Include="..\Services\McpVersion.cs" Link="Linked\McpVersion.cs" />
+    <Compile Include="..\Services\ScanOptions.cs" Link="Linked\ScanOptions.cs" />
+    <Compile Include="..\Services\ScanConfig.cs" Link="Linked\ScanConfig.cs" />
+    <Compile Include="..\Services\CommandLineArguments.cs" Link="Linked\CommandLineArguments.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+</Project>

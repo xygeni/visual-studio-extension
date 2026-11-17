@@ -35,6 +35,13 @@ namespace vs2026_plugin.UI.Control
     }
 
 
+    /// <summary>The tag of a category's "Run ... scan only" node: runs that scan type alone (xygeni/xygeni-product-backlog#415).</summary>
+    public class RunCategoryScan
+    {
+        public string ScanType { get; }
+        public RunCategoryScan(string scanType) { ScanType = scanType; }
+    }
+
     public partial class XygeniExplorerControl : UserControl
     {
         private readonly XygeniIssueService _issueService;
@@ -133,6 +140,15 @@ namespace vs2026_plugin.UI.Control
             if (_vm == null) return;
 
             var clickedContainer = FindVisualParent<TreeViewItem>(e.OriginalSource as DependencyObject);
+            if (clickedContainer?.DataContext is TreeNodeData runNode && runNode.Tag is RunCategoryScan runCategory)
+            {
+                e.Handled = true;
+                if (_installerService.IsInstalled && _licenseService.IsLicenseAvailable)
+                {
+                    _ = XygeniCommands.RunScanOnly(runCategory.ScanType);
+                }
+                return;
+            }
             if (clickedContainer?.DataContext is TreeNodeData nodeData &&
                 nodeData.Tag is IXygeniIssue issue)
             {
